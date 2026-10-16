@@ -123,6 +123,8 @@ A versão **1.7.0** adiciona **RETIRA**, **CORREIOS** e **Consultar outros**. Se
 
 Depois de cotar, agradecimentos como **ok,obgd** e **obrigado pelos valores** recebem **te ajudo em algo mais?**. **Sim** pergunta **Oque mais precisa?**; o próximo item é cotado. **Não** encerra sem enviar confirmação ou lembrete. Repetir um agradecimento não repete o menu. Agradecer não é interpretado como compra. As opções são clicáveis no simulador; no WhatsApp por QR, o cliente responde com texto ou número: envio **1/2/3** e ajuda **1 = Sim / 2 = Não**.
 
+A versão **1.8.0** reconhece o cliente enviando motorista, motoboy, Uber ou 99 para buscar e registra **RETIRA**. Também aceita `vou mandar retirar` e `vou retirar`. Pergunta **Para agilizar na hora da retirada informe nome de quem vai retirar e nome da empresa**, com uma tentativa por chat em 24 horas, sem insistência depois. Os textos recebidos aparecem em **Retirada · identificação** e no histórico. Pausas e atendimentos humanos são respeitados. A migração apenas acrescenta campos ao banco; atualizar não dispara mensagens antigas. Ao substituir os arquivos, preserve `.env` e os dados existentes. Recrie o serviço com `docker compose up -d --build` na mesma pasta da instalação e atualize o navegador com Ctrl+F5.
+
 ## Cotações configuradas
 
 - **Abertas:** `(preço por metro da faixa inteira ÷ largura cadastrada em mm) × comprimento pedido em metros × largura pedida em mm`.

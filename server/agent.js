@@ -4,7 +4,7 @@ import {parseBeltRequest,productBeltSpec,calculateBeltQuote,formatBeltCalculatio
 import {classifyMessage,quoteSearchText} from './intents.js';
 import {Followups,followupActions} from './followups.js';
 import {splitBeltRequests} from './requests.js';
-import {helpActions,helpChoice,deliveryMethod,deliveryLabels} from './conversation.js';
+import {helpActions,helpChoice,deliveryMethod,deliveryLabels,pickupQuestion,isPickupDetails,pickupQuoteText} from './conversation.js';
 export const introduction='Olá, sou o agente ROBINHO, vou te ajudar no atendimento nesse momento';
 const stopwords=new Set('a o os as de da do das dos em no na nos nas e um uma uns umas para por com sem quero queria preciso tem teria gostaria cotacao cotacoes cota cotar mim voce favor poderia poderiam orcamento orcar preco valor quanto custa sai manda enviar envia me pra pro favor bom boa dia tarde noite ola oi voces vc voce pode podem qual quais sao esta estao esse essa este aqui ai ver mais opcoes opcao modelo modelos comprar saber consegue conseguem arruma procura procurando estou buscando ve porfavor pfv jogo jogos unidade unidades aro medida medidas marca marcas meu minha carro'.split(' '));
 const synonyms={correias:'correia',sincronizadoras:'sincronizadora',sincronizadas:'sincronizadora',sincronizada:'sincronizadora',dentadas:'sincronizadora',dentada:'sincronizadora',abertas:'aberta',industriais:'industrial',trapezoidais:'trapezoidal',pneus:'pneu',celulares:'celular',smartphones:'celular',smartphone:'celular',baterias:'bateria',pecas:'peca',rodas:'roda',pneuzinho:'pneu'};
@@ -138,13 +138,27 @@ export class Agent {
    return{chatId:chat.id,intent:'add_items',paused:chat.mode==='manual'};
   }
   const delivery=deliveryMethod(body,{menu:chat.delivery_menu===1});
-  if(delivery&&(chat.purchase_requested||type==='purchase')){
+  const quoteWithPickup=delivery==='retira'&&type==='quote'?pickupQuoteText(body):null;
+  const pickupAllowed=!chat.human_requested&&this.store.settings().agentEnabled&&(chat.mode==='auto'||!chat.assigned_user_id&&chat.delivery_allowed===1);
+  const claimPickupQuestion=()=>{
+   if(delivery!=='retira'||!pickupAllowed)return '';
+   // Claim before transport: repeated inbound, failures and restarts cannot spam this question.
+   const claimed=this.store.run('UPDATE chats SET pickup_prompted_at=?,pickup_pending_details=1,pickup_details=NULL,help_state=NULL,closed_at=NULL WHERE id=? AND (pickup_prompted_at IS NULL OR pickup_prompted_at<=?)',now,chat.id,now-86400000);
+   return claimed.changes?pickupQuestion:'';
+  };
+  if(chat.pickup_pending_details&&isPickupDetails(body,type)&&(!delivery||/\b(?:nome|empresa|retirante|quem vai retirar)\b/.test(analysis.text))){
+   if(type!=='thanks'&&helpChoice(body)===null&&!/\b(?:nao sei|ainda nao sei|vou ver|nao decidi)\b/.test(analysis.text))this.store.run('UPDATE chats SET pickup_details=CASE WHEN pickup_details IS NULL THEN ? ELSE pickup_details||char(10)||? END WHERE id=?',body.trim(),body.trim(),chat.id);
+   this.store.changed();return{chatId:chat.id,intent:'pickup_details',paused:chat.mode==='manual'};
+  }
+  if(delivery&&(delivery==='retira'||chat.purchase_requested||type==='purchase')){
    this.store.run('UPDATE chats SET delivery_method=?,delivery_detail=?,delivery_due_at=NULL,delivery_menu=0,delivery_allowed=0 WHERE id=?',delivery,body.trim(),chat.id);this.store.changed();
-   if(!['purchase','human','end_conversation'].includes(type)){
-    if(chat.delivery_allowed&&!chat.assigned_user_id&&!chat.closed_at&&this.store.settings().agentEnabled&&delivery!==chat.delivery_method)await respond(`Forma de envio registrada: *${deliveryLabels[delivery]}*. Nossa equipe vai confirmar os detalhes com você.`,[]);
+   if(!['purchase','human','end_conversation'].includes(type)&&!quoteWithPickup){
+    if(delivery==='retira'){const question=claimPickupQuestion();if(question)await respond(question,[]);}
+    else if(chat.delivery_allowed&&!chat.assigned_user_id&&!chat.closed_at&&this.store.settings().agentEnabled&&delivery!==chat.delivery_method)await respond(`Forma de envio registrada: *${deliveryLabels[delivery]}*. Nossa equipe vai confirmar os detalhes com você.`,[]);
     return{chatId:chat.id,intent:'delivery',delivery};
    }
   }
+  if(chat.pickup_pending_details)this.store.run('UPDATE chats SET pickup_pending_details=0 WHERE id=?',chat.id);
   if(type!=='thanks'&&chat.help_state)this.store.run('UPDATE chats SET help_state=NULL WHERE id=?',chat.id);
   if(type==='end_conversation'){
    this.store.run("UPDATE chats SET closed_at=?,query=NULL,shown='[]',quoted_options='[]',batch_queries='[]',pending_item_index=NULL,pending_measure=NULL,pending_selection=NULL WHERE id=?",now,chat.id);this.store.changed();
@@ -163,11 +177,12 @@ export class Agent {
     if(!chat.purchase_requested)this.store.run('UPDATE chats SET delivery_method=?,delivery_detail=?,help_state=NULL WHERE id=?',delivery,delivery?body.trim():null,chat.id);
    }else{this.store.run('UPDATE chats SET human_requested=1 WHERE id=?',chat.id);this.store.cancelFollowups(chat.id);}
    this.store.changed();
+   const pickupPrompt=purchase?claimPickupQuestion():'';
    if(!already&&chat.mode!=='manual'&&this.store.settings().agentEnabled){
     const reply=purchase?`Entendi que você quer fechar uma compra.${selected?`\nInteresse na opção ${analysis.selectionIndex+1}: *${selected.brand}* · ${selected.description}.`:''}\nAvisei nossa equipe para confirmar os itens, as medidas, a disponibilidade e as condições de pagamento com você. O pedido ainda não está confirmado e o estoque não foi reservado.`:'Claro! Avisei um atendente. A partir de agora, esta conversa fica com a nossa equipe. Assim que possível, alguém responde por aqui.';
-    const acknowledged=await respond(reply+(delivery?`\nForma de envio: *${deliveryLabels[delivery]}*.`:''),[]);
+    const acknowledged=await respond(reply+(delivery?`\nForma de envio: *${deliveryLabels[delivery]}*.`:'')+(pickupPrompt?'\n\n'+pickupPrompt:''),[]);
     if(purchase&&!delivery&&!chat.assigned_user_id&&acknowledged.status==='sent')this.store.run('UPDATE chats SET delivery_allowed=1,delivery_origin_id=? WHERE id=?',inbound.id,chat.id);
-   }
+   }else if(pickupPrompt)await respond(pickupPrompt,[]);
    if(purchase)this.followups.delivery.schedule(chat.id);
    return{chatId:chat.id,handoff:true,intent:type};
   }
@@ -190,7 +205,7 @@ export class Agent {
   }
   else{const pricing=this.store.settings();
    if(channel==='whatsapp'&&pricing.priceMode==='unconfirmed'){this.store.run("UPDATE chats SET mode='manual',pause_until=NULL,needs_human=1 WHERE id=?",chat.id);await respond('Vou chamar um atendente para confirmar os valores e preparar sua cotação.',[]);return{chatId:chat.id,handoff:true};}
-   const baseProducts=channel==='simulator'&&!this.store.get('SELECT id FROM products LIMIT 1')?demoProducts:this.store.all('SELECT * FROM products');const products=baseProducts.map(p=>({...p,price:p.price===null?null:Math.round(p.price*(1+(pricing.priceMode==='cost'?pricing.markupPercent||0:0)/100)*100)/100}));let detail=quoteSearchText(body);if(chat.pending_measure&&/^\s*\d+(?:[.,]\d+)?\s*[.!?]?\s*$/.test(body)){const units={ribs:'frisos',mm:'mm',meters:'metros',fixedWidth:'mm'};if(units[chat.pending_measure])detail=body.replace(/[.!?]$/,'')+' '+units[chat.pending_measure];}let query=type==='more'?chat.query:detail;
+   const baseProducts=channel==='simulator'&&!this.store.get('SELECT id FROM products LIMIT 1')?demoProducts:this.store.all('SELECT * FROM products');const products=baseProducts.map(p=>({...p,price:p.price===null?null:Math.round(p.price*(1+(pricing.priceMode==='cost'?pricing.markupPercent||0:0)/100)*100)/100}));let detail=quoteSearchText(quoteWithPickup||body);if(chat.pending_measure&&/^\s*\d+(?:[.,]\d+)?\s*[.!?]?\s*$/.test(body)){const units={ribs:'frisos',mm:'mm',meters:'metros',fixedWidth:'mm'};if(units[chat.pending_measure])detail=body.replace(/[.!?]$/,'')+' '+units[chat.pending_measure];}let query=type==='more'?chat.query:detail;
    const selectedIndex=analysis.selectionIndex??(type==='quote'&&!/\d/.test(parseBeltRequest(detail).reference)?chat.pending_selection:null);
    const selected=type==='quote'&&selectedIndex!==null?quotedOptions[selectedIndex]:null;
    if(type==='quote'&&chat.query&&splitBeltRequests(detail).length===1){
@@ -207,8 +222,9 @@ export class Agent {
    else if(channel==='whatsapp'&&!products.length){response={body:'Nosso estoque está sendo atualizado. Vou chamar um atendente para confirmar os preços e a disponibilidade para você.',actions:[]};this.store.run("UPDATE chats SET mode='manual',pause_until=NULL,needs_human=1 WHERE id=?",chat.id);}
    else{response=quoteReply(selected?products.filter(p=>p.id===selected.id):products,query,type==='more'?JSON.parse(chat.shown||'[]'):[],{mmDimension:'width',openBeltPriceBasis:pricing.openBeltPriceBasis||'unconfirmed'});const shown=type==='more'?[...JSON.parse(chat.shown||'[]'),...response.ids]:response.ids;this.store.run('UPDATE chats SET query=?,shown=?,pending_measure=?,quoted_options=?,batch_queries=?,pending_item_index=?,pending_selection=NULL WHERE id=?',query,JSON.stringify(shown),response.awaiting||null,JSON.stringify(response.quotedOptions||[]),JSON.stringify(response.batchQueries||[]),response.pendingItemIndex??null,chat.id);}
   }
+  const pickupPrompt=quoteWithPickup&&!response.needsHuman?claimPickupQuestion():'';if(pickupPrompt)response.body+='\n\n'+pickupPrompt;
   if(response.needsHuman)this.store.run("UPDATE chats SET mode='manual',pause_until=NULL,needs_human=1 WHERE id=?",chat.id);
-  if(this.store.chat(chat.id).mode==='manual'&&!response.needsHuman&&!response?.body?.includes('estoque está sendo atualizado'))return{chatId:chat.id,paused:true};const reply=await respond(response.body,response.actions);if(reply.status==='sent'&&response.ids?.length&&!response.awaiting){this.store.run('UPDATE chats SET last_quote_message_id=?,help_state=NULL WHERE id=?',reply.id,chat.id);if(analysis.allowFollowup)this.followups.schedule(chat.id,reply.id);}return{chatId:chat.id,intent:type};
+  if(this.store.chat(chat.id).mode==='manual'&&!response.needsHuman&&!response?.body?.includes('estoque está sendo atualizado'))return{chatId:chat.id,paused:true};const reply=await respond(response.body,response.actions);if(reply.status==='sent'&&response.ids?.length&&!response.awaiting){this.store.run('UPDATE chats SET last_quote_message_id=?,help_state=NULL WHERE id=?',reply.id,chat.id);if(analysis.allowFollowup&&!pickupPrompt)this.followups.schedule(chat.id,reply.id);}return{chatId:chat.id,intent:type};
  }
  async reply(chat,body,actions=[],direction='bot',{author=null,transportBody=body}={}){
   const message=this.store.addMessage({chatId:chat.id,direction,body,actions,status:'pending',author,deliveryBody:direction==='owner'?transportBody:null});
