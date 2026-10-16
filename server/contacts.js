@@ -1,5 +1,6 @@
 import {randomUUID} from 'node:crypto';
 import {z} from 'zod';
+import {sendAvatar} from './avatar-response.js';
 const fail=(message,status=400)=>Object.assign(new Error(message),{status});
 export function normalizeContactPhone(value){
  if(typeof value!=='string'||value.length>40||!/^\+?[\d ().-]+$/.test(value.trim()))throw fail('Informe um telefone válido com DDD; para outros países, use + e o código do país.');
@@ -15,8 +16,9 @@ export function contactRoutes({app,store,accounts,agent,whatsapp}){
  app.get('/api/contacts',(req,res)=>{
   const search=String(req.query.search||'').trim().slice(0,100),digits=search.replace(/\D/g,''),page=Math.max(0,Math.min(5000,Math.trunc(Number(req.query.page))||0)),limit=50,query=`%${search}%`,numeric=digits?`%${digits}%`:query;
   const where='WHERE name LIKE ? OR company LIKE ? OR phone LIKE ?',params=[query,query,numeric];
-  res.json({items:store.all('SELECT id,name,phone,company,created,updated FROM contacts '+where+' ORDER BY name COLLATE NOCASE,id LIMIT ? OFFSET ?',...params,limit,page*limit),total:store.get('SELECT count(*) n FROM contacts '+where,...params).n,page,limit});
+  res.json({items:store.all("SELECT id,name,phone,company,created,updated,(SELECT version FROM whatsapp_avatars WHERE remote_id=contacts.phone||'@c.us') avatar_version FROM contacts "+where+' ORDER BY name COLLATE NOCASE,id LIMIT ? OFFSET ?',...params,limit,page*limit),total:store.get('SELECT count(*) n FROM contacts '+where,...params).n,page,limit});
  });
+ app.get('/api/contacts/:id/avatar',(req,res)=>{const person=contact(req.params.id);sendAvatar(store,res,person.phone+'@c.us');});
  app.post('/api/contacts',(req,res)=>{
   const input=profile.parse(req.body),phone=normalizeContactPhone(input.phone);if(store.get('SELECT id FROM contacts WHERE phone=?',phone))throw fail('Já existe um contato com esse telefone.',409);
   const id=randomUUID(),now=Date.now();store.run('INSERT INTO contacts VALUES(?,?,?,?,?,?,?)',id,input.name,phone,input.company,req.user.id,now,now);store.changed();res.status(201).json(contact(id));
@@ -33,7 +35,8 @@ export function contactRoutes({app,store,accounts,agent,whatsapp}){
   const chat=matches[0]&&store.chat(matches[0].id);if(chat?.assigned_user_id&&chat.assigned_user_id!==req.user.id&&req.user.role!=='admin')throw fail('Esta conversa está com outro usuário.',403);
   return{person,chat};
  }
- app.get('/api/contacts/:id/history',(req,res)=>{const{person,chat}=contactHistory(req);if(chat)whatsapp.loadHistory?.(chat).catch(()=>{});res.json({contact:{id:person.id,name:person.name},chat:chat||null,messages:chat?store.messages(chat.id):[]});});
+ app.get('/api/contacts/:id/history',(req,res)=>{const{person,chat}=contactHistory(req);if(chat)whatsapp.loadHistory?.(chat).catch(()=>{});else whatsapp.loadContactHistory?.(person).catch(()=>{});const pending=whatsapp.syncer?.contactRequests.get(person.phone);res.json({contact:{id:person.id,name:person.name},chat:chat||null,messages:chat?store.messages(chat.id):[],history_pending:pending?.pending||false,history_error:pending?.error||null});});
+ app.post('/api/contacts/:id/history',(req,res)=>{const{person,chat}=contactHistory(req);z.object({}).strict().parse(req.body||{});if(chat)whatsapp.loadHistory?.(chat,{force:true}).catch(()=>{});else whatsapp.loadContactHistory?.(person,{force:true}).catch(()=>{});res.status(202).json({ok:true});});
  app.post('/api/contacts/:id/read',async(req,res)=>{const{chat}=contactHistory(req),{force=false}=z.object({force:z.boolean().optional()}).strict().parse(req.body||{});const sync=chat?await whatsapp.markRead?.(chat,{force}):null;res.json({ok:true,sync:sync||null});});
  app.post('/api/contacts/:id/open',async(req,res)=>{
   z.object({}).strict().parse(req.body||{});const initial=contact(req.params.id);

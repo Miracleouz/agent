@@ -6,9 +6,10 @@ import {photoInfo,maxPhotoBytes} from './images.js';
 import {connectionError,safeConnectionDetail,authenticationTimeout} from './connection-errors.js';
 import {WhatsAppSync} from './whatsapp-sync.js';
 import {WhatsAppReadSync} from './whatsapp-read.js';
+import {WhatsAppAvatars} from './whatsapp-avatars.js';
 const {Client,LocalAuth,MessageMedia}=wa;
 export class WhatsApp {
- constructor(store,dataDir,{clientFactory=options=>new Client(options),logger=console}={}){this.store=store;this.dataDir=dataDir;this.clientFactory=clientFactory;this.logger=logger;this.client=null;this.status='disconnected';this.qr=null;this.error=null;this.number=null;this.receiver=null;this.generation=0;this.mediaTasks=new Set();this.syncer=new WhatsAppSync(this);this.readSync=new WhatsAppReadSync(this);}
+ constructor(store,dataDir,{clientFactory=options=>new Client(options),logger=console}={}){this.store=store;this.dataDir=dataDir;this.clientFactory=clientFactory;this.logger=logger;this.client=null;this.status='disconnected';this.qr=null;this.error=null;this.number=null;this.receiver=null;this.generation=0;this.mediaTasks=new Set();this.syncer=new WhatsAppSync(this);this.readSync=new WhatsAppReadSync(this);this.avatars=new WhatsAppAvatars(this);}
  snapshot(){return {status:this.status,qr:this.qr,error:this.error,number:this.number,transport:'qr',nativeButtons:false,sync:this.syncer.snapshot()};}
  update(status,error=null){if(status!=='ready'&&this.readSync?.pending.size)this.readSync.reset();this.status=status;this.error=error;if(status!=='ready')this.store.cancelFollowups(null,{whatsappOnly:true});this.store.changed();}
  connectionFailed(error){const diagnosis=connectionError(error);this.qr=null;this.number=null;this.update('error',`${diagnosis.message} Código: ${diagnosis.code}.`);this.store.event('whatsapp_error',this.error);this.logger.error(`[WhatsApp] ${diagnosis.code}: ${safeConnectionDetail(error)}`);}
@@ -19,7 +20,7 @@ export class WhatsApp {
  async startConnection(){
   if(this.client&&['starting','qr','authenticated','ready'].includes(this.status))return this.snapshot();
   const generation=++this.generation;
-  this.syncer.reset();this.readSync.reset();this.readyAt=null;
+  this.syncer.reset();this.readSync.reset();this.avatars.reset();this.readyAt=null;
   const previous=this.client;this.client=null;if(previous)await previous.destroy().catch(()=>{});
   if(this.generation!==generation)return this.snapshot();
   const executablePath=process.env.CHROME_PATH||['/usr/bin/chromium','/usr/bin/chromium-browser','/usr/bin/google-chrome'].find(existsSync);
@@ -37,7 +38,7 @@ export class WhatsApp {
   client.on('authenticated',()=>{if(this.generation!==generation||this.status==='error')return;this.qr=null;this.update('authenticated');});
   client.on('ready',()=>{if(this.generation!==generation||this.status==='error')return;readyAt=Math.floor(Date.now()/1000);this.readyAt=readyAt;this.qr=null;this.number=client.info?.wid?.user||null;this.update('ready');this.store.event('whatsapp','WhatsApp conectado.');this.syncer.run().catch(error=>{if(this.generation===generation)this.syncer.report(error);});});
   client.on('auth_failure',()=>{if(this.generation===generation)this.update('error','A sessão expirou. Desconecte e leia um novo QR Code.');});
-  client.on('disconnected',()=>{if(this.generation===generation&&this.status!=='error'){this.syncer.reset();this.readSync.reset();this.qr=null;this.number=null;this.update('disconnected','A conexão foi encerrada. Conecte novamente no painel.');}});
+  client.on('disconnected',()=>{if(this.generation===generation&&this.status!=='error'){this.syncer.reset();this.readSync.reset();this.avatars.reset();this.qr=null;this.number=null;this.update('disconnected','A conexão foi encerrada. Conecte novamente no painel.');}});
   client.on('message',message=>{
    if(this.generation!==generation||this.client!==client||this.status!=='ready'||readyAt===null)return;
    const group=/^\d+(?:-\d+)?@g\.us$/.test(message.from);
@@ -68,7 +69,8 @@ export class WhatsApp {
   return this.snapshot();
  }
  sync(){return this.syncer.run();}
- loadHistory(chat){return this.syncer.history(chat);}
+ loadHistory(chat,options){return this.syncer.history(chat,options);}
+ loadContactHistory(person,options){return this.syncer.contact(person,options);}
  markRead(chat,options){return this.readSync.mark(chat,options);}
  async send(chat,body,actions){
   if(this.status!=='ready'||!this.client)throw new Error('WhatsApp desconectado. Conecte no painel e reenvie a mensagem.');
@@ -109,6 +111,6 @@ export class WhatsApp {
   if(edited.id?._serialized!==providerId)throw new Error('Não foi possível confirmar a edição.');return providerId;
  }
  async drainMedia(){await Promise.allSettled([...this.mediaTasks]);}
- async disconnect(){++this.generation;this.syncer.reset();this.readSync.reset();const client=this.client;this.client=null;if(client){try{if(this.status==='ready')await client.logout();}catch{}await client.destroy().catch(()=>{});}this.qr=null;this.number=null;this.update('disconnected');}
- async close(){++this.generation;this.syncer.reset();this.readSync.reset();if(this.client)await this.client.destroy().catch(()=>{});}
+ async disconnect(){++this.generation;this.syncer.reset();this.readSync.reset();this.avatars.reset();const client=this.client;this.client=null;if(client){try{if(this.status==='ready')await client.logout();}catch{}await client.destroy().catch(()=>{});}this.qr=null;this.number=null;this.update('disconnected');}
+ async close(){++this.generation;this.syncer.reset();this.readSync.reset();this.avatars.reset();if(this.client)await this.client.destroy().catch(()=>{});}
 }

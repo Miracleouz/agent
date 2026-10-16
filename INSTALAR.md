@@ -168,6 +168,8 @@ A versão **1.14.1** mantém o funcionamento da 1.14.0 e finaliza a entrega sem 
 
 A versão **1.14.2** corrige a recuperação das listas quando a consulta do WhatsApp falha em um único chat e impede que atualizações da sincronização cancelem continuamente a carga de Contatos. O painel informa qual etapa ficou incompleta. Atualize preservando a sessão; não é necessário apagar o volume ou gerar outro QR para instalar a correção. Veja [CORRECAO_SINCRONIZACAO_1_14_2.md](docs/CORRECAO_SINCRONIZACAO_1_14_2.md).
 
+A versão **1.15.0** mostra fotos de contatos e grupos e sincroniza automaticamente ao conectar e a cada cinco minutos. Pendências são verificadas novamente em 30 segundos; o botão de sincronização continua disponível. O histórico privado pede ao telefone os dados disponíveis, recupera falhas na leitura das mensagens e permite **Carregar histórico** por conversa ou contato. A consulta por Contatos continua sem assumir o atendimento. A migração adiciona um cache de fotos e preserva histórico, usuários, estoque e sessão. Veja [FOTOS_E_HISTORICO_AUTOMATICO.md](docs/FOTOS_E_HISTORICO_AUTOMATICO.md).
+
 ## Cotações configuradas
 
 - **Abertas:** `(preço por metro da faixa inteira ÷ largura cadastrada em mm) × comprimento pedido em metros × largura pedida em mm`.

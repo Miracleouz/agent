@@ -11,6 +11,7 @@ import {readRows,validateRows,replaceCatalog,fetchSheet,sheetExport} from './cat
 import {Agent} from './agent.js';
 import {contactRoutes} from './contacts.js';
 import {messageToolsRoutes} from './message-tools.js';
+import {sendAvatar} from './avatar-response.js';
 const fail=(message,status=400)=>Object.assign(new Error(message),{status});
 export function createApp({store,whatsapp,production=false,appUrl=process.env.APP_URL}){
  const app=express();app.disable('x-powered-by');
@@ -49,10 +50,13 @@ export function createApp({store,whatsapp,production=false,appUrl=process.env.AP
  });
  function getChat(id){const chat=store.chat(id);if(!chat)throw fail('Conversa não encontrada.',404);return chat;}
  function visibleChat(req){const chat=getChat(req.params.id);if(req.user.role!=='admin'&&chat.assigned_user_id&&chat.assigned_user_id!==req.user.id)throw fail('Esta conversa está com outro usuário.',403);return chat;}
- app.get('/api/chats/:id/messages',(req,res)=>{const chat=visibleChat(req);whatsapp.loadHistory?.(chat).catch(()=>{});res.json(store.messages(req.params.id));});
+ app.get('/api/chats/:id/messages',(req,res)=>{const chat=visibleChat(req);whatsapp.loadHistory?.(chat).catch(()=>{});whatsapp.avatars?.refresh([chat.phone]).catch(()=>{});res.json(store.messages(req.params.id));});
+ app.get('/api/chats/:id/avatar',(req,res)=>{const chat=visibleChat(req);sendAvatar(store,res,chat.phone);});
+ app.post('/api/chats/:id/history',(req,res)=>{const chat=visibleChat(req);z.object({}).strict().parse(req.body||{});whatsapp.loadHistory?.(chat,{force:true}).catch(()=>{});res.status(202).json({ok:true});});
  app.post('/api/chats/:id/read',async(req,res)=>{const chat=visibleChat(req),{force=false}=z.object({force:z.boolean().optional()}).strict().parse(req.body||{});if(chat.assigned_user_id===req.user.id){store.run('UPDATE chats SET unread=0 WHERE id=?',chat.id);store.changed();}const sync=await whatsapp.markRead?.(chat,{force});res.json({ok:true,sync:sync||null});});
  function getGroup(id){const group=store.get('SELECT id FROM whatsapp_groups WHERE id=?',id);if(!group)throw fail('Grupo não encontrado.',404);return group;}
- app.get('/api/groups/:id/messages',(req,res)=>{getGroup(req.params.id);res.json(store.groupMessages(req.params.id));});
+ app.get('/api/groups/:id/messages',(req,res)=>{getGroup(req.params.id);whatsapp.avatars?.refresh([req.params.id]).catch(()=>{});res.json(store.groupMessages(req.params.id));});
+ app.get('/api/groups/:id/avatar',(req,res)=>{getGroup(req.params.id);sendAvatar(store,res,req.params.id);});
  app.post('/api/groups/:id/read',async(req,res)=>{getGroup(req.params.id);const{force=false}=z.object({force:z.boolean().optional()}).strict().parse(req.body||{});store.run('UPDATE whatsapp_groups SET unread=0 WHERE id=?',req.params.id);store.changed();const sync=await whatsapp.markRead?.({id:req.params.id,phone:req.params.id,channel:'group'},{force});res.json({ok:true,sync:sync||null});});
  function queued(req,fn){const original=getChat(req.params.id);return agent.enqueue(`${original.provider}:${original.channel}:${original.phone}`,()=>{
   const user=accounts.getUser(req);if(!user)throw fail('Entre novamente no painel.',401);req.user=user;return fn(getChat(original.id),user);

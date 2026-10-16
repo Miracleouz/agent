@@ -107,6 +107,8 @@ body{background:#f4f6fa}
 .modal .read-sync-status{border:1px solid var(--line);border-radius:8px;margin:15px 0}
 .sync-issues{padding-left:16px;margin:9px 0 0;color:#8b662c;font-size:11px;line-height:1.7}
 .sync-issues code{font-size:9px;color:#718096;white-space:nowrap}
+.avatar .profile-photo{display:block;width:100%;height:100%;object-fit:cover;border-radius:inherit}.avatar{position:relative}.contact-name{display:flex;align-items:center;gap:10px}.contact-name>.avatar{width:36px;min-width:36px;height:36px;font-size:11px}
+.history-status{display:flex;gap:8px;align-items:center;padding:8px 14px;font-size:10px;line-height:1.6;flex-shrink:0;color:#647b99;background:#f7faff;border-bottom:1px solid var(--line)}.history-status>span{flex:1}.history-status>svg{flex-shrink:0}.history-status button{display:flex;align-items:center;gap:5px;border:1px solid #dce5f2;background:#fff;color:#45658f;font-size:10px;padding:5px 8px;border-radius:6px;flex-shrink:0}.history-status button:disabled{opacity:.55}.modal .history-status{border-radius:8px;margin:12px 0}
 @media(min-width:1200px){
  .rail{width:214px;padding:25px 14px 20px;align-items:stretch}
  .logo-button{display:flex;gap:11px;align-items:center;padding:0 6px;justify-content:flex-start;text-align:left;width:100%}

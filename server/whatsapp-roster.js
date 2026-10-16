@@ -38,3 +38,9 @@ export async function readCachedRoster(client,kind){
  if(kind==='chats')result.items=result.items.map(item=>new wa.Chat(client,{id:item.id,formattedTitle:item.name,t:item.timestamp,unreadCount:item.unreadCount,isGroup:item.isGroup}));
  return result;
 }
+export function cachedIdentities(ids){
+ let collections;try{collections=window.require('WAWebCollections');}catch{collections=window.Store;}
+ const models=collections?.Contact?.getModelsArray?.()||collections?.Contact?.models||[],pairs=[];
+ for(const model of models){try{const lid=model.id?._serialized,pn=typeof model.phoneNumber==='string'?model.phoneNumber:model.phoneNumber?._serialized;if(/^\d+@lid$/.test(lid||'')&&/^\d+@(c\.us|s\.whatsapp\.net)$/.test(pn||'')&&(ids.includes(lid)||ids.includes(pn)))pairs.push({lid,pn});}catch{}}
+ return pairs;
+}
