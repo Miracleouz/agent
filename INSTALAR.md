@@ -94,7 +94,7 @@ Não exclua o volume `cota-data`: ele guarda os dados e a sessão. Atualizar a a
 
 ## Atualizar uma instalação existente
 
-1. Baixe o [ZIP atualizado](https://github.com/Miracleouz/agent/archive/refs/heads/main.zip) e extraia em uma pasta temporária.
+1. Baixe o ZIP da versão que você recebeu e extraia em uma pasta temporária. Confira a versão no arquivo `package.json`. O ZIP do GitHub só contém essa atualização depois que ela for publicada no repositório. Veja também `ATUALIZAR_DOCKER.md`, incluído neste pacote.
 2. Na **pasta da instalação atual**, execute `docker compose stop`.
 3. Copie os arquivos extraídos para essa mesma pasta da instalação, substituindo os arquivos do código. Preserve seu `.env`, caso exista, e a pasta `data`, caso use instalação com Node.js.
 4. Ainda na pasta da instalação atual, execute:
