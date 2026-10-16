@@ -64,3 +64,17 @@ test('owner sees purchase intent only after an ambiguous choice is confirmed',as
  await page.screenshot({path:'test-results/purchase-intent.png',fullPage:true});
  await page.getByRole('button',{name:'Reativar agente'}).click();await expect(page.locator('.purchase-summary')).toHaveCount(0);await expect(page.getByRole('button',{name:'Responder manual',exact:true})).toBeVisible();
 });
+test('owner configures followup delay and quotes AT10 33000 as 33 meters',async({page})=>{
+ await page.goto('/');await page.getByLabel('E-mail',{exact:true}).fill('marina@example.test');await page.getByLabel('Senha',{exact:true}).fill('owner-pass-test-123');await page.getByRole('button',{name:'Entrar no painel',exact:true}).click();
+ await page.getByRole('button',{name:'Configurações',exact:true}).click();await expect(page.getByLabel('Acompanhamento após cotação',{exact:true})).toHaveValue('5');
+ await page.getByLabel('Acompanhamento após cotação',{exact:true}).selectOption('10');await page.getByRole('button',{name:'Salvar configurações',exact:true}).click();await expect(page.getByRole('status')).toContainText('Configurações salvas');
+ await page.reload();await page.getByRole('button',{name:'Configurações',exact:true}).click();await expect(page.getByLabel('Acompanhamento após cotação',{exact:true})).toHaveValue('10');
+ await page.getByLabel('Acompanhamento após cotação',{exact:true}).selectOption('5');await page.getByRole('button',{name:'Salvar configurações',exact:true}).click();await expect(page.getByRole('status')).toContainText('Configurações salvas');
+ await page.getByRole('button',{name:'Estoque',exact:true}).click();
+ const csv='sku;produto;marca;preco;quantidade;unidade\nAT10;CORREIA AT10 50MM ABERTA;GATES;114,00;100;Metro (M)';
+ await page.getByLabel('Importar estoque').setInputFiles({name:'aberta.csv',mimeType:'text/csv',buffer:Buffer.from(csv)});await page.getByRole('button',{name:'Substituir estoque',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
+ await page.getByRole('button',{name:'Conversas',exact:true}).click();
+ async function send(body){await page.getByRole('button',{name:'Testar agente',exact:true}).click();await page.getByRole('dialog').getByRole('combobox').selectOption('demo-outro');await page.getByLabel('Mensagem do cliente').fill(body);await page.getByRole('button',{name:'Enviar teste',exact:true}).click();}
+ await send('AT10 33000');await expect(page.locator('.message-body').last()).toContainText('Qual é a largura');
+ await send('25');await expect(page.locator('.message-body').last()).toContainText('33 m × 25 mm');await expect(page.locator('.message-body').last()).toContainText('1.881,00 por corte');
+});

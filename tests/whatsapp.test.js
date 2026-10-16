@@ -9,6 +9,7 @@ import {WhatsApp} from '../server/whatsapp.js';
 import {Agent} from '../server/agent.js';
 import {Store} from '../server/db.js';
 import {demoProducts,replaceCatalog} from '../server/catalog.js';
+import {followupActions} from '../server/followups.js';
 
 class FakeClient extends EventEmitter {
  constructor(){super();this.sent=[];this.info={wid:{user:'5511000000000',_serialized:'5511000000000@c.us'},lid:{_serialized:'100000000000@lid'}};}
@@ -27,7 +28,7 @@ async function fixture(t){
  whatsapp.receiver=input=>{const result=agent.receive(input);pending.push(result);return result;};
  t.after(async()=>{await whatsapp.close();store.close();rmSync(dir,{recursive:true,force:true});});
  await whatsapp.connect();
- return{store,whatsapp,clients,client:clients[0],drain:()=>Promise.all(pending.splice(0))};
+ return{store,whatsapp,agent,clients,client:clients[0],drain:()=>Promise.all(pending.splice(0))};
 }
 const message=(extra={})=>({from:'5511999999999@c.us',type:'chat',body:'A42',timestamp:Math.floor(Date.now()/1000)+1,id:{_serialized:randomUUID(),fromMe:false},_data:{notifyName:'Cliente',isNewMsg:true},...extra});
 
@@ -83,4 +84,19 @@ test('actual customer attachments still flag the chat for human assistance',asyn
  }
  await drain();assert.equal(client.sent.length,6);assert.equal(store.chats().length,6);
  assert(store.chats().every(chat=>chat.needs_human===1&&chat.mode==='manual'));
+});
+test('disconnect and reconnect discard a pending reminder before its deadline',async t=>{
+ const{store,whatsapp,agent,client,clients,drain}=await fixture(t);client.emit('ready');client.emit('message',message());await drain();
+ const chat=store.chats()[0];assert.equal(chat.followup_state,'scheduled');
+ client.emit('disconnected');assert.equal(store.chat(chat.id).followup_due_at,null);
+ await whatsapp.connect();clients.at(-1).emit('ready');await agent.followups.check();
+ assert.equal(client.sent.length,1);assert.equal(clients.at(-1).sent.length,0);
+});
+test('QR transport sends exactly three idle choices in one message with numeric replies',async t=>{
+ const{whatsapp,client}=await fixture(t);client.emit('ready');
+ await whatsapp.send({phone:'5511@c.us'},'Como você prefere continuar?',followupActions);
+ assert.equal(client.sent.length,1);const body=client.sent[0].body;
+ for(const action of followupActions)assert.equal(body.split(action.label).length-1,1);
+ assert.match(body,/1 — Quer fechar o pedido\?/);assert.match(body,/2 — Adicionar mais itens/);assert.match(body,/3 — Encerrar conversa/);
+ assert.doesNotMatch(body,/ATENDENTE/);assert.equal(whatsapp.snapshot().nativeButtons,false);
 });

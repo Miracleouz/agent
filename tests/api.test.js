@@ -24,6 +24,13 @@ test('owner receives purchase reason and chosen quote in the dashboard then clea
  assert.equal(chat.handoff_reason,'purchase');assert.equal(chat.needs_human,1);assert.match(chat.purchase_summary,/Opção 2/);
  await post(owner,`/api/chats/${chat.id}/resume`).expect(200);assert.equal(store.chat(chat.id).handoff_reason,null);
 });
+test('owner controls the idle delay and cannot enable sub-five-minute followups',async t=>{
+ const{owner,store}=await fixture(t);assert.equal(store.settings().followupMinutes,5);
+ await owner.patch('/api/settings').set('X-Cota-Request','1').send({followupMinutes:1}).expect(400);
+ await owner.patch('/api/settings').set('X-Cota-Request','1').send({followupMinutes:10}).expect(200);assert.equal(store.settings().followupMinutes,10);
+ await post(owner,'/api/simulator/message').send({body:'A42'}).expect(201);assert.equal(store.chats()[0].followup_state,'scheduled');
+ await owner.patch('/api/settings').set('X-Cota-Request','1').send({followupMinutes:0}).expect(200);assert.equal(store.chats()[0].followup_due_at,null);
+});
 test('persisted sessions are hashed, password changes invalidate other sessions',async t=>{const{app,owner,store}=await fixture(t);const other=request.agent(app);await post(other,'/api/auth/login').send({email:'dono@example.test',password:'password-secure-123'}).expect(200);await post(owner,'/api/auth/password').send({current:'password-secure-123',password:'new-password-123'}).expect(200);await other.get('/api/bootstrap').expect(401);await owner.get('/api/bootstrap').expect(200);assert(!store.get('SELECT password FROM owner').password.includes('new-password-123'));});
 test('catalog pagination searches all rows and reports items without sale prices',async t=>{
  const{owner}=await fixture(t);await post(owner,'/api/stock/import').field('confirm','replace').attach('file',Buffer.from(csv),'estoque.csv').expect(200);const r=await owner.get('/api/products?search=Gates&page=0').expect(200);assert.equal(r.body.total,1);assert.equal(r.body.items[0].brand,'Gates');assert.equal(r.body.limit,100);assert.equal(r.body.unpriced,0);

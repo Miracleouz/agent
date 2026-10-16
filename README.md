@@ -9,6 +9,7 @@ Painel do dono para uma loja de correias industriais, abertas e sincronizadoras.
 - **Responder manual** pausa somente o chat escolhido por 5–120 minutos ou até reativação. O prazo padrão pode ser configurado. O agente volta para novas mensagens, sem responder retroativamente às antigas.
 - **Falar com atendente** destaca o chat com uma exclamação, confirma a transferência uma vez e pausa até reativação explícita. Áudios e anexos também são encaminhados a uma pessoa.
 - **Cotação ou compra:** reconhece pedidos de preço e orçamento, intenção de fechar uma compra, abreviações e erros comuns de escrita. Negação, pesquisa e perguntas de preço evitam um encaminhamento prematuro. Uma escolha ambígua, como apenas `2` ou `pode ser`, pede confirmação. `Quero a segunda`, `pode separar` e `quero fechar` geram o alerta **Quer fechar pedido** e pausam somente esse chat. O dono vê a opção e a cotação de referência; confirma itens, medidas, disponibilidade e pagamento antes de finalizar. O agente não confirma a venda nem reserva estoque.
+- **Após 5 minutos sem resposta a uma cotação enviada**, oferece uma vez: **Quer fechar o pedido?**, **Adicionar mais itens** e **Encerrar conversa**. Só cotações com opções reais agendam acompanhamento. Resposta do cliente, pesquisa explícita, pedido para separar, atendimento manual, agente desligado, reinício ou reconexão impedem o envio. Há no máximo uma tentativa por chat a cada 24 horas, sem repetir para quem continua em silêncio ou tentar novamente após falha. O dono pode alterar ou desativar o prazo nas Configurações. Por QR, o cliente responde **1, 2 ou 3** ou escreve a opção; no simulador, pode clicar. Adicionar itens inicia a consulta do próximo produto, preservando o histórico; encerrar para o atendimento até uma nova mensagem do cliente.
 - Cotação com até cinco opções reais, priorizando marcas diferentes e preços menores, sem substituir outra referência para completar a lista. **MAIS** pagina sem repetir produtos já mostrados. Estoque insuficiente é informado; itens sem preço ficam sob consulta.
 - Busca local com normalização de acentos, palavras usuais, plurais, pequenas variações de escrita, referência e números. Exemplos: `A42`, `A-42`, `A 42`; correias dentadas/sincronizadoras; filtros de marca e `até R$ 50`. Segue o contexto para marca ou orçamento. Não depende de uma API de IA paga, nem é um modelo de linguagem generalista.
 - Importação de CSV/Excel com prévia e confirmação antes da substituição. Sincronização manual ou agendada com Google Sheets. Arquivos inválidos preservam o catálogo existente. Produtos sem SKU recebem identificador estável; linhas idênticas sem SKU são agregadas apenas quando descrição, marca, medida, preço e unidade coincidem.
@@ -80,6 +81,7 @@ A importação/sincronização substitui o catálogo inteiro, não soma ao estoq
 - **5V2240, 4 canais**: mantém `5V` como perfil e calcula por 4 canais. Uma peça pronta com 6 canais fixos não é oferecida como peça de 4 canais.
 - **1304 8M, largura de 20 mm**: uma linha por mm é multiplicada por 20. Uma linha por peça pronta usa seu preço fechado e exige a largura correspondente.
 - **Aberta AT10, 2 metros × 25 mm**: se uma faixa inteira de 50 mm custar R$ 100 por metro, o corte custa `(100 ÷ 50) × 2 × 25 = R$ 100`. Esse valor é apenas um exemplo de cálculo, não um catálogo fornecido com o código.
+- **AT10 33000**: interpreta 33000 mm como **33 metros de correia aberta** e pergunta a largura se faltar. Também aceita `AT10 33.000`, `AT10 33000 x 25mm` e `AT10 33m 25mm`. A conversão abreviada é limitada aos perfis lineares AT/T: comprimentos sem unidade a partir de 10000 mm, ou a partir de 1000 mm quando explicitamente abertos/com unidade mm. Códigos comuns de fechadas e larguras como `AT10 50mm` não viram comprimentos. Se o cliente disser `fechada`, essa conversão não é aplicada.
 
 O agente pergunta medidas faltantes e mantém a referência no contexto. Sincronizadoras por mm usam a largura do corte. Para abertas, comprimento é convertido para metros e largura para mm. O padrão `per_meter_full_width` considera o preço por metro da faixa inteira cadastrada; outra base pode ser selecionada nas Configurações. A cotação mostra a fórmula e o valor por correia, sem reservar ou baixar estoque. Cortes e disponibilidade são confirmados pelo atendente.
 
@@ -88,6 +90,7 @@ O agente pergunta medidas faltantes e mantém a referência no contexto. Sincron
 ```bash
 npm test
 npm run test:intents
+npm run test:followups
 npm run build
 npm run test:ui
 ```
@@ -95,6 +98,8 @@ npm run test:ui
 Os testes de navegador usam o Chromium local (`CHROME_PATH` pode sobrescrever) e um servidor/banco temporário isolado na porta 3101. Cobrem cadastro, cinco opções, paginação, alerta de atendente, resposta manual, reativação, importação confirmada e layout móvel. Não dependem de um número de WhatsApp nem enviam mensagens a clientes. A geração de um QR real foi validada separadamente; pareamento e entrega a um contato real dependem da leitura pelo dono e não foram feitos automaticamente.
 
 A bateria de intenções exercita **180 mensagens diferentes** pelo fluxo completo do agente, com expectativas escritas nos testes. Inclui cotação, compra, negação, condição, abreviações, erros de escrita e respostas ambíguas. Veja o [relatório dos testes de intenção](docs/TESTES_INTENCOES.md). Esses resultados cobrem os casos do corpus; a interpretação usa regras locais e não garante entendimento de qualquer frase possível.
+
+O [relatório de acompanhamento e comprimentos](docs/TESTES_ACOMPANHAMENTO.md) documenta os testes de não repetição, concorrência, falhas, reconexão, reinício, escolhas do menu e conversão de comprimento. Os prazos são exercitados com relógio simulado, sem esperar cinco minutos reais ou enviar mensagens a contatos.
 
 As dependências estão fixadas pelo lockfile. O override de `@puppeteer/browsers` evita dependências de extração antigas; a inicialização do Chromium pelo Puppeteer e a geração real do QR foram verificadas com ele. O override de UUID mantém uma versão corrigida compatível com ExcelJS. O navegador é fornecido pelo sistema, sem downloads automáticos de Chrome pelo npm.
 

@@ -44,7 +44,7 @@ export function createApp({store,whatsapp,production=false,appUrl=process.env.AP
   req.on('close',()=>{clearInterval(keepalive);store.off('change',onChange);});
  });
  app.patch('/api/settings',(req,res)=>{
-  const input=z.object({businessName:z.string().trim().min(2).max(80).optional(),pauseMinutes:z.number().int().min(1).max(1440).optional(),agentEnabled:z.boolean().optional(),syncMinutes:z.union([z.literal(0),z.number().int().min(5).max(1440)]).optional(),sheetUrl:z.string().max(500).optional(),priceMode:z.enum(['unconfirmed','sale','cost']).optional(),markupPercent:z.number().min(0).max(1000).optional(),mmDimension:z.literal('width').optional(),openBeltPriceBasis:z.enum(['unconfirmed','per_meter_mm','per_meter_full_width']).optional()}).strict().parse(req.body);
+  const input=z.object({businessName:z.string().trim().min(2).max(80).optional(),pauseMinutes:z.number().int().min(1).max(1440).optional(),agentEnabled:z.boolean().optional(),followupMinutes:z.union([z.literal(0),z.number().int().min(5).max(60)]).optional(),syncMinutes:z.union([z.literal(0),z.number().int().min(5).max(1440)]).optional(),sheetUrl:z.string().max(500).optional(),priceMode:z.enum(['unconfirmed','sale','cost']).optional(),markupPercent:z.number().min(0).max(1000).optional(),mmDimension:z.literal('width').optional(),openBeltPriceBasis:z.enum(['unconfirmed','per_meter_mm','per_meter_full_width']).optional()}).strict().parse(req.body);
   if(input.sheetUrl)sheetExport(input.sheetUrl);res.json(store.setSettings(input));
  });
  function getChat(id){const chat=store.chat(id);if(!chat)throw fail('Conversa não encontrada.',404);return chat;}
@@ -52,7 +52,7 @@ export function createApp({store,whatsapp,production=false,appUrl=process.env.AP
  app.post('/api/chats/:id/read',(req,res)=>{getChat(req.params.id);store.run('UPDATE chats SET unread=0 WHERE id=?',req.params.id);res.json({ok:true});});
  app.post('/api/chats/:id/pause',(req,res)=>{getChat(req.params.id);const{minutes}=z.object({minutes:z.number().int().min(1).max(1440).nullable()}).parse(req.body);res.json(store.pause(req.params.id,minutes));});
  app.post('/api/chats/:id/resume',(req,res)=>{getChat(req.params.id);res.json(store.resume(req.params.id));});
- const agent=new Agent(store,(chat,body,actions)=>whatsapp.send(chat,body,actions));whatsapp.receiver=input=>agent.receive(input);
+ const agent=new Agent(store,(chat,body,actions)=>whatsapp.send(chat,body,actions),{canSend:chat=>chat.channel==='simulator'||whatsapp.snapshot().status==='ready'});whatsapp.receiver=input=>agent.receive(input);
  app.post('/api/chats/:id/send',async(req,res)=>{
   const chat=getChat(req.params.id);const{body}=z.object({body:z.string().trim().min(1).max(4000)}).parse(req.body);
   if(chat.mode!=='manual')throw fail('Ative "Responder manual" antes de enviar.',409);
@@ -86,6 +86,6 @@ export function createApp({store,whatsapp,production=false,appUrl=process.env.AP
   console.error('Erro interno:',err.name);res.status(500).json({error:'Não foi possível concluir. Verifique a conexão e tente novamente.'});
  });
  let lastAttempt=0;
- const timer=setInterval(()=>{store.resumeExpired();const s=store.settings();if(s.syncMinutes>0&&Date.now()-Math.max(s.lastSync||0,lastAttempt)>s.syncMinutes*60000){lastAttempt=Date.now();syncStock(s.sheetUrl).catch(()=>store.event('sync_error','Não foi possível sincronizar a planilha. O estoque anterior foi preservado.'));}},10000);timer.unref();
- app.locals.close=()=>clearInterval(timer);app.locals.agent=agent;return app;
+ const timer=setInterval(()=>{store.resumeExpired();agent.followups.check().catch(()=>store.event('followup_error','Não foi possível conferir o acompanhamento. Nenhum reenvio automático foi agendado.'));const s=store.settings();if(s.syncMinutes>0&&Date.now()-Math.max(s.lastSync||0,lastAttempt)>s.syncMinutes*60000){lastAttempt=Date.now();syncStock(s.sheetUrl).catch(()=>store.event('sync_error','Não foi possível sincronizar a planilha. O estoque anterior foi preservado.'));}},10000);timer.unref();
+ app.locals.close=()=>{clearInterval(timer);agent.followups.close();};app.locals.agent=agent;return app;
 }

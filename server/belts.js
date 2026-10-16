@@ -31,6 +31,19 @@ export function parseBeltRequest(query){
   if(request[key]!==null&&key!=='pieces'&&!nearEqual(request[key],value))request.error='Recebi medidas diferentes na mesma mensagem. Confirme uma referência e uma medida de corte por vez.';
   request[key]=value;
  };
+ // Long linear AT/T belt requests commonly omit the length unit: AT10 33000 = 33 m.
+ // Keep ordinary closed-belt length codes and small stock widths out of this conversion.
+ if(!/\bfechad[ao]s?\b/.test(reference)){
+  reference=reference.replace(/\b((?:at|t)\s*(?:2[.,]5|5|10|20))[\s/-]+(\d+(?:[.,]\d+)*)(?:\s*(milimetros?|metros?|mm|m)\b)?(?:\s*(?:x|×|por|\/)\s*(\d+(?:[.,]\d+)?)(?:\s*mm\b)?)?(?=\s|$|[,;!?])/g,(all,profile,raw,unit,width)=>{
+   const value=numeric(raw.replace(/\.(?=\d{3}(?:[.,]|$))/g,''));
+   const inMeters=unit==='m'||unit?.startsWith('metro');
+   const explicitOpen=/\babertas?\b/.test(query.toLowerCase());
+   if(!inMeters&&value<(explicitOpen||unit?1000:10000))return all;
+   put('meters',inMeters?value:value/1000);
+   if(width)put('mm',numeric(width));
+   return `${profile.replace(/\s/g,'')} aberta `;
+  });
+ }
  reference=reference.replace(/\b(\d{1,3})\s*(dpj|dpk|pj|pk|pl|pm|ph)[ -]*(\d{2,6})\b/g,(_all,ribs,profile,length)=>{put('ribs',Number(ribs));return `${profile} ${length}`;});
  const lengthToMeters=(n,unit)=>numeric(n)/(unit==='mm'||unit.startsWith('milimetro')?1000:unit==='cm'||unit.startsWith('centimetro')?100:1);
  reference=reference.replace(/\b(?:comprimento|comprido)\s*(?:de\s*)?(\d+(?:[.,]\d+)?)\s*(milimetros?|centimetros?|metros?|mm|cm|m)\b/g,(_all,n,unit)=>{put('meters',lengthToMeters(n,unit));return ' ';});

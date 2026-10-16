@@ -21,7 +21,10 @@ function optionIndex(text){
 export function classifyMessage(body,{options=[],pendingMeasure=null,pendingSelection=null}={}){
  const text=conversationText(body),hasQuote=options.length>0;
  let selectionIndex=pendingMeasure?null:optionIndex(text);
- const result=type=>({type,selectionIndex,text});
+ let allowFollowup=true;
+ const result=type=>({type,selectionIndex,text,allowFollowup});
+ if(/^(?:quero |pode |vamos )?(?:encerrar|encerra|finalizar|terminar|fechar) (?:a )?(?:conversa|atendimento)[!.? ]*$/.test(text)||/^(?:encerrar|tchau|ate mais)[!.? ]*$/.test(text))return result('end_conversation');
+ if(/^(?:quero |vou |vamos |pode )?(?:adicionar|acrescentar|incluir) (?:mais )?(?:itens|items|item|produtos|produto|correias|correia)[!.? ]*$/.test(text)||/^(?:adicionar|mais itens)[!.? ]*$/.test(text))return result('add_items');
  const withoutNegatedHuman=text.replace(/\bnao (?:quero |preciso |desejo )?(?:falar com (?:um |uma |o |a )?)?(?:atendente|humano|pessoa|vendedor|vendedora|comercial|suporte)\b/g,'');
  if(text==='human'||/\b(?:atendente|humano|vendedor|vendedora|comercial|suporte)\b|falar com (?:uma? )?(?:pessoa|alguem)|nao (?:quero|queria) (?:um )?(?:bot|robo)/.test(withoutNegatedHuman))return result('human');
  if(/\b(?:cancelar|cancela|cancelamento|rastrear|rastreio|trocar|devolver|reembolso)\b|\b(?:status|andamento) d[oa] (?:meu |minha )?(?:pedido|compra)|\b(?:pedido|compra) (?:ja )?confirmad[oa]\s*\?/.test(text))return result('human');
@@ -35,6 +38,7 @@ export function classifyMessage(body,{options=[],pendingMeasure=null,pendingSele
  const purchase=/\b(?:quero|queria|gostaria de|preciso|decidi|vou|vamos|bora|vamo|vms|podemos|pode|posso) (?:\w+ ){0,2}(?:comprar|fechar|finalizar|confirmar|levar|separar|reservar|faturar|pagar|efetivar)\b|\b(?:fecha|feche|fechamos|fechado|fechou|confirmo|aprovo|aprovado|autorizo|separa|separe|reserva|reserve|fatura|fature)\b|\b(?:fico com|vou ficar com|quero ficar com|pode emitir|emitir (?:o )?pedido|pode gerar (?:o )?(?:pedido|pix|boleto)|manda (?:a )?chave pix|passa (?:a )?chave pix|como (?:eu )?(?:faco para|faco pra|posso) pagar)\b|\b(?:quero|vou levar|manda|mande|envia|envie) (?:a |o )?(?:opcao|primeira|primeiro|segunda|segundo|terceira|terceiro|quarta|quarto|quinta|quinto)\b|\b(?:fechar|finalizar|confirmar) (?:a |o |meu |minha )?(?:pedido|compra|orcamento)\b|\b(?:manda|mande|envia|envie) (?:\w+ ){0,2}\d+ (?:correias?|pecas?|unidades?)\b/.test(text)
   ||hasQuote&&/\bquero [ao] [1-5]\b/.test(text)
   ||hasQuote&&/^(?:comprar|fechar|finalizar|confirmar|levar|separar|pagar|quero essa|quero esta|quero esse|quero este|pode mandar|manda pra mim)[.!? ]*$/.test(text);
+ allowFollowup=!noPurchase&&!/\b(?:separa|separe|reserva|reserve|(?:pode|quero|preciso|vou|vamos) (?:me )?(?:separar|reservar))\b/.test(text);
  if(noPurchase||priceQuestion)return result('quote');
  if(purchase){
   const hasNewReference=/\d/.test(parseBeltRequest(quoteSearchText(body)).reference);
@@ -55,7 +59,7 @@ export function quoteSearchText(body){
   .replace(/\b(?:segund[ao]|terc[ao]|quart[ao]|quint[ao]|sext[ao])[ -]feira\b/g,' ')
   .replace(/\b(?:opcao|numero|n[º°.]?)\s*\d+\b|\b(?:primeir[ao]|segund[ao]|terceir[ao]|quart[ao]|quint[ao])\b/g,' ')
   .replace(/\b(?:mes que vem|semana que vem|mais pra frente|outro dia|vou pensar|vou ver|nao agora|se der|se ficar|se for|se tiver|sem compromisso)\b/g,' ')
-  .replace(/\b(?:passa|passar|informar|antes|mas|eu|vou|vem|barato|desconto|hoje|compre|decida|confirma|conferir)\b/g,' ')
+  .replace(/\b(?:passa|passar|informar|antes|mas|eu|vou|vem|barato|desconto|hoje|compre|decida|confirma|conferir|separar|separa|separe|reservar|reserva|reserve)\b/g,' ')
   .replace(/\b(?:quanto|qual|quais|cotacao|orcamento|cotar|orcar|cotando|orcando|pesquisando|pesquisa|comparando|consultando|consulta|consultar|solicito|solicitar|cotacoes|orcamentos|preco|precos|valor|valores|custa|custam|custo|sairia|comprar|compro|compra|fechar|fecho|fechando|levar|finalizar|confirmar|pedido|pedidos|apenas|somente|ainda|so|depois|talvez|quem|sabe|caso|ja|agora|estou|estamos|fazer|faca|faz|envie|mande|passe|informa|saber|consultando|vendo|precisando|interessado|interesse|compraria|desejo|desejaria|seria|fica|ficaria|sai|sair|ficam|consegue|conseguem|mostra|mostrar|gostei|mesmo|tambem|poderia|solicitar|por gentileza|favor|porfavor)\b/g,' ')
   .replace(/\s+/g,' ').trim();
 }

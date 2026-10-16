@@ -75,6 +75,8 @@ Esta atualização impede que notificações internas do WhatsApp sejam confundi
 
 A versão 1.1.0 também distingue cotação de intenção de compra. Ao reconhecer uma compra, exibe **Quer fechar pedido** e o resumo no painel, pausando somente aquela conversa para a equipe confirmar os detalhes. Respostas ambíguas pedem confirmação; a venda não é concluída automaticamente. A atualização adiciona os campos necessários ao banco e preserva o histórico existente.
 
+A versão 1.2.0 entende `AT10 33000` como **33 metros de aberta**, perguntando a largura quando faltar. Em **Configurações → Acompanhamento após cotação**, o padrão é **5 minutos sem resposta**, com as três opções fechar pedido, adicionar itens e encerrar. Por QR, o cliente responde **1, 2 ou 3**. O menu tem no máximo uma tentativa por conversa em 24 horas e não fica se repetindo. Resposta do cliente, pedido para separar, atendimento manual, desligamento, reinício ou reconexão cancelam o agendamento anterior. A instalação atualizada não envia lembretes de cotações antigas: é necessária uma nova cotação após mensagem do cliente.
+
 ## Cotações configuradas
 
 - **Abertas:** `(preço por metro da faixa inteira ÷ largura cadastrada em mm) × comprimento pedido em metros × largura pedida em mm`.

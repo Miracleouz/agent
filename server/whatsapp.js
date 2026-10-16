@@ -6,7 +6,7 @@ const {Client,LocalAuth}=wa;
 export class WhatsApp {
  constructor(store,dataDir,{clientFactory=options=>new Client(options)}={}){this.store=store;this.dataDir=dataDir;this.clientFactory=clientFactory;this.client=null;this.status='disconnected';this.qr=null;this.error=null;this.number=null;this.receiver=null;this.generation=0;}
  snapshot(){return {status:this.status,qr:this.qr,error:this.error,number:this.number,transport:'qr',nativeButtons:false};}
- update(status,error=null){this.status=status;this.error=error;this.store.changed();}
+ update(status,error=null){this.status=status;this.error=error;if(status!=='ready')this.store.cancelFollowups(null,{whatsappOnly:true});this.store.changed();}
  async connect(){
   if(this.client&&['starting','qr','authenticated','ready'].includes(this.status))return this.snapshot();
   if(this.client){await this.client.destroy().catch(()=>{});this.client=null;}
@@ -45,7 +45,8 @@ export class WhatsApp {
  async send(chat,body,actions){
   if(this.status!=='ready'||!this.client)throw new Error('WhatsApp desconectado. Conecte no painel e reenvie a mensagem.');
   if(/@g\.us$|@broadcast$|@newsletter$/.test(chat.phone))throw new Error('O envio para grupos é bloqueado.');
-  const menu=actions?.length?'\n\n'+actions.map(a=>a.id==='more'?'↪ Digite *MAIS* para ver mais opções.':'👤 Digite *ATENDENTE* para falar com uma pessoa.').join('\n'):'';
+  const followup=actions?.length===3&&actions[0].id==='close_order';
+  const menu=followup?'\n\n'+actions.map((a,i)=>`${i+1} — ${a.label}`).join('\n')+'\n\nResponda *1*, *2* ou *3*.':actions?.length?'\n\n'+actions.map(a=>a.id==='more'?'↪ Digite *MAIS* para ver mais opções.':'👤 Digite *ATENDENTE* para falar com uma pessoa.').join('\n'):'';
   const result=await this.client.sendMessage(chat.phone,body+menu);return result.id?._serialized;
  }
  async disconnect(){++this.generation;const client=this.client;this.client=null;if(client){try{if(this.status==='ready')await client.logout();}catch{}await client.destroy().catch(()=>{});}this.qr=null;this.number=null;this.update('disconnected');}
