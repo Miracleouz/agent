@@ -44,6 +44,7 @@ export class Store extends EventEmitter {
   }
   if(migrateAlerts)this.db.exec("UPDATE chats SET purchase_requested=1,order_state='interest' WHERE needs_human=1 AND handoff_reason='purchase';UPDATE chats SET human_requested=1 WHERE needs_human=1 AND handoff_reason='human';");
   if(!this.all('PRAGMA table_info(chats)').some(column=>column.name==='routing_version'))this.db.exec('ALTER TABLE chats ADD COLUMN routing_version INTEGER NOT NULL DEFAULT 0');
+  for(const [name,type] of [['delivery_method','TEXT'],['delivery_detail','TEXT'],['delivery_allowed','INTEGER NOT NULL DEFAULT 0'],['delivery_due_at','INTEGER'],['delivery_state',"TEXT NOT NULL DEFAULT 'idle'"],['delivery_origin_id','TEXT'],['delivery_anchor_id','TEXT'],['delivery_last_attempt','INTEGER'],['delivery_menu','INTEGER NOT NULL DEFAULT 0'],['help_state','TEXT'],['last_quote_message_id','TEXT'],['help_offered_quote_id','TEXT']])if(!this.all('PRAGMA table_info(chats)').some(column=>column.name===name))this.db.exec(`ALTER TABLE chats ADD COLUMN ${name} ${type}`);
   this.db.prepare('INSERT OR IGNORE INTO settings VALUES(1,?)').run(JSON.stringify({priceMode:'sale',markupPercent:0,mmDimension:'width',openBeltPriceBasis:'per_meter_full_width',businessName:'Minha loja',pauseMinutes:30,sheetUrl:DEFAULT_SHEET,syncMinutes:0,agentEnabled:true,lastSync:null}));
   this.db.prepare("UPDATE messages SET status='failed',error='Envio interrompido pelo reinício. Confira no WhatsApp antes de reenviar.' WHERE status='pending'").run();
   // Never deliver old reminders when a process is restarted or a database is reopened.
@@ -55,9 +56,10 @@ export class Store extends EventEmitter {
  transaction(fn){this.db.exec('BEGIN IMMEDIATE');try{const r=fn();this.db.exec('COMMIT');return r;}catch(e){this.db.exec('ROLLBACK');throw e;}}
  changed(){this.emit('change');}
  settings(){return {followupMinutes:5,signHumanMessages:true,...JSON.parse(this.get('SELECT value FROM settings WHERE id=1').value)};}
- setSettings(patch){const previous=this.settings(),s={...previous,...patch};this.run('UPDATE settings SET value=? WHERE id=1',JSON.stringify(s));if(patch.agentEnabled===false||patch.followupMinutes!==undefined&&patch.followupMinutes!==previous.followupMinutes)this.cancelFollowups();this.changed();return s;}
- cancelFollowups(id=null,{whatsappOnly=false,keepMenu=false}={}){
+ setSettings(patch){const previous=this.settings(),s={...previous,...patch};this.run('UPDATE settings SET value=? WHERE id=1',JSON.stringify(s));if(patch.agentEnabled===false)this.cancelFollowups();else if(patch.followupMinutes!==undefined&&patch.followupMinutes!==previous.followupMinutes)this.cancelFollowups(null,{quoteOnly:true});this.changed();return s;}
+ cancelFollowups(id=null,{whatsappOnly=false,keepMenu=false,keepDelivery=false,quoteOnly=false}={}){
   this.run(`UPDATE chats SET followup_due_at=NULL,followup_state=CASE WHEN followup_state IN ('scheduled','sending') THEN 'cancelled' ELSE followup_state END${keepMenu?'':',followup_menu=0'} WHERE ${id?'id=?':whatsappOnly?"channel='whatsapp'":'1=1'}`, ...(id?[id]:[]));
+  if(!quoteOnly)this.run(`UPDATE chats SET delivery_due_at=NULL,delivery_state=CASE WHEN delivery_state IN ('scheduled','sending') THEN 'cancelled' ELSE delivery_state END${keepDelivery?'':',delivery_allowed=0,delivery_menu=0'} WHERE ${id?'id=?':whatsappOnly?"channel='whatsapp'":'1=1'}`,...(id?[id]:[]));
  }
  event(kind,detail){this.run('INSERT INTO events VALUES(?,?,?,?)',randomUUID(),kind,detail,Date.now());this.changed();}
  chat(id){const c=this.get('SELECT c.*,(SELECT name FROM users WHERE id=c.assigned_user_id) assigned_name FROM chats c WHERE id=?',id);return c?{...c,shown:JSON.parse(c.shown)}:null;}

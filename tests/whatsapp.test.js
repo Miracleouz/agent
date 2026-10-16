@@ -10,6 +10,7 @@ import {Agent} from '../server/agent.js';
 import {Store} from '../server/db.js';
 import {demoProducts,replaceCatalog} from '../server/catalog.js';
 import {followupActions} from '../server/followups.js';
+import {helpActions,deliveryActions} from '../server/conversation.js';
 
 class FakeClient extends EventEmitter {
  constructor(){super();this.sent=[];this.info={wid:{user:'5511000000000',_serialized:'5511000000000@c.us'},lid:{_serialized:'100000000000@lid'}};}
@@ -99,4 +100,8 @@ test('QR transport sends exactly three idle choices in one message with numeric 
  for(const action of followupActions)assert.equal(body.split(action.label).length-1,1);
  assert.match(body,/1 — Quer fechar o pedido\?/);assert.match(body,/2 — Adicionar mais itens/);assert.match(body,/3 — Encerrar conversa/);
  assert.doesNotMatch(body,/ATENDENTE/);assert.equal(whatsapp.snapshot().nativeButtons,false);
+});
+for(const [kind,actions] of [['gratitude',helpActions],['delivery',deliveryActions]])test(`QR transport preserves the ${kind} options as a numbered text menu`,async t=>{
+ const{whatsapp,client}=await fixture(t);client.emit('ready');await whatsapp.send({phone:'5511@c.us'},'Pergunta de teste',actions);assert.equal(client.sent.length,1);
+ for(const [index,action] of actions.entries())assert(client.sent[0].body.includes(`${index+1} — ${action.label}`));assert.doesNotMatch(client.sent[0].body,/ATENDENTE/);assert.equal(whatsapp.snapshot().nativeButtons,false);
 });

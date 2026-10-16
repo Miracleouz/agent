@@ -52,8 +52,8 @@ export class WhatsApp {
  async send(chat,body,actions){
   if(this.status!=='ready'||!this.client)throw new Error('WhatsApp desconectado. Conecte no painel e reenvie a mensagem.');
   if(/@g\.us$|@broadcast$|@newsletter$/.test(chat.phone))throw new Error('O envio para grupos é bloqueado.');
-  const followup=actions?.length===3&&actions[0].id==='close_order';
-  const menu=followup?'\n\n'+actions.map((a,i)=>`${i+1} — ${a.label}`).join('\n')+'\n\nResponda *1*, *2* ou *3*.':actions?.length?'\n\n'+actions.map(a=>a.id==='more'?'↪ Digite *MAIS* para ver mais opções.':'👤 Digite *ATENDENTE* para falar com uma pessoa.').join('\n'):'';
+  const numbered=actions?.length&&['close_order','help_yes','delivery_pickup'].includes(actions[0].id);
+  const menu=numbered?'\n\n'+actions.map((a,i)=>`${i+1} — ${a.label}`).join('\n')+(actions.length===2?'\n\nResponda *1* ou *2*.':'\n\nResponda *1*, *2* ou *3*.'):actions?.length?'\n\n'+actions.map(a=>a.id==='more'?'↪ Digite *MAIS* para ver mais opções.':'👤 Digite *ATENDENTE* para falar com uma pessoa.').join('\n'):'';
   const result=await this.client.sendMessage(chat.phone,body+menu);return result.id?._serialized;
  }
  async disconnect(){++this.generation;const client=this.client;this.client=null;if(client){try{if(this.status==='ready')await client.logout();}catch{}await client.destroy().catch(()=>{});}this.qr=null;this.number=null;this.update('disconnected');}

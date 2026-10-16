@@ -119,6 +119,10 @@ A versão **1.5.0** permite vários **Admins**, cargo **Comercial**, edição de
 
 A versão **1.6.0** adiciona as abas por usuário, Não lidas e Grupos, tomada automática ao abrir e **Liberar conversa**. A migração mantém os responsáveis já cadastrados. Novas tomadas automáticas não expiram; as pausas temporárias existentes continuam podendo reativar o bot, sem liberar o responsável. A atualização não envia mensagens a clientes nem importa mensagens antigas de grupos. Foram executados 200 cenários novos do fluxo de atendimento, além das regressões anteriores.
 
+A versão **1.7.0** adiciona **RETIRA**, **CORREIOS** e **Consultar outros**. Se o cliente pedir para fechar/separar, não indicar a forma e ficar três minutos sem falar, o bot pergunta uma vez enquanto o chat está sem responsável. Se um atendente assumir antes, a pergunta é cancelada. Forma informada junto ao pedido ou durante a espera é registrada no resumo; não há cálculo automático de frete. Reiniciar ou reconectar não dispara perguntas antigas.
+
+Depois de cotar, agradecimentos como **ok,obgd** e **obrigado pelos valores** recebem **te ajudo em algo mais?**. **Sim** pergunta **Oque mais precisa?**; o próximo item é cotado. **Não** encerra sem enviar confirmação ou lembrete. Repetir um agradecimento não repete o menu. Agradecer não é interpretado como compra. As opções são clicáveis no simulador; no WhatsApp por QR, o cliente responde com texto ou número: envio **1/2/3** e ajuda **1 = Sim / 2 = Não**.
+
 ## Cotações configuradas
 
 - **Abertas:** `(preço por metro da faixa inteira ÷ largura cadastrada em mm) × comprimento pedido em metros × largura pedida em mm`.
