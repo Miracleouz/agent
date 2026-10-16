@@ -191,3 +191,5 @@ Por QR Code, o cliente usa **MAIS** e **ATENDENTE** como comandos. Os botões cl
 - **Google Sheets não abre:** importe seu Excel pelo painel ou ajuste o compartilhamento da planilha.
 
 O código, o build e os fluxos do painel foram testados no ambiente Node.js/Chromium da nuvem. A instalação por Docker precisa concluir o build no computador de destino; a imagem Docker não foi construída neste ambiente.
+
+A versão **1.15.1** corrige a confirmação de envio de textos e fotos quando a biblioteca aceita a mensagem, mas perde o retorno da consulta. A confirmação recuperada usa o identificador exato da tentativa; não há reenvio. Falhas ao sincronizar a leitura não alteram um envio confirmado. Se não houver prova suficiente, aparece **Envio não confirmado**, sem check de envio. Confira no WhatsApp antes de reenviar. Veja [CONFIRMACAO_ENVIO.md](docs/CONFIRMACAO_ENVIO.md).

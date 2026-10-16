@@ -35,10 +35,10 @@ async function fixture(t,{file=':memory:'}={}){
  return{store,client,wa,app,agent,users,open,photo,edit,close,advance:ms=>{clock+=ms;}};
 }
 const flows=['foto e histórico','editar legenda','editar texto e auditar','transferência e permissões','envio duplicado e tela antiga','prazo ou recusa sem reenvio'];
-test('missing photo confirmation stays failed and cannot resend on a repeated click or timer',async t=>{
+test('missing photo confirmation stays uncertain and cannot resend on a repeated click or timer',async t=>{
  const f=await fixture(t),actor=f.users[2],chat=await f.open(actor),key=randomUUID();f.client.missingPhotoId=true;
- const result=await f.photo(actor,chat,'Sem confirmação',key).expect(502);assert.equal(result.body.message.status,'failed');assert.equal(result.body.message.provider_id,null);
- await f.photo(actor,chat,'Sem confirmação',key).expect(502);f.advance(day);await f.agent.followups.check();assert.equal(f.client.sent.length,1);assert.equal(f.store.messages(chat.id).length,1);
+ const result=await f.photo(actor,chat,'Sem confirmação',key).expect(202);assert.equal(result.body.status,'uncertain');assert.equal(result.body.provider_id,null);
+ await f.photo(actor,chat,'Sem confirmação',key).expect(202);f.advance(day);await f.agent.followups.check();assert.equal(f.client.sent.length,1);assert.equal(f.store.messages(chat.id).length,1);
 });
 for(const [ui,profile] of profiles.entries())for(const [ci,caption] of captions.entries())for(const [fi,flow] of flows.entries()){
  const index=(ui*captions.length+ci)*flows.length+fi+1;
@@ -90,8 +90,8 @@ for(const data of [Buffer.alloc(0),Buffer.from('<svg onload="alert(1)"></svg>'),
 test('anonymous readers and unrelated chats cannot retrieve image bytes or edit history',async t=>{
  const f=await fixture(t),actor=f.users[2],chat=await f.open(actor),image=(await f.photo(actor,chat).expect(201)).body;await request(f.app).get(`/api/chats/${chat.id}/messages/${image.id}/photo`).expect(401);await request(f.app).get(`/api/chats/${chat.id}/messages/${image.id}/edits`).expect(401);f.store.run("INSERT INTO chats(id,phone,name,channel,provider,mode,assigned_user_id,updated,last_inbound) VALUES('another','5522@c.us','Outra','whatsapp','qr','manual',?,?,0)",actor.id,Date.now());await actor.http.get(`/api/chats/another/messages/${image.id}/photo`).expect(404);await actor.http.get(`/api/chats/another/messages/${image.id}/edits`).expect(404);
 });
-test('failed photo request is durable and a repeated click cannot retry it',async t=>{
- const f=await fixture(t),actor=f.users[2],chat=await f.open(actor),requestId=randomUUID();f.client.failPhoto=true;const first=await f.photo(actor,chat,'Resultado incerto',requestId).expect(502);await f.photo(actor,chat,'Resultado incerto',requestId).expect(502);assert.equal(f.client.sent.length,1);assert.equal(f.store.messages(chat.id).length,1);assert.equal(f.store.message(first.body.message.id).status,'failed');for(let i=0;i<100;i++){f.advance(minute);await f.agent.followups.check();}assert.equal(f.client.sent.length,1);
+test('uncertain photo request is durable and a repeated click cannot retry it',async t=>{
+ const f=await fixture(t),actor=f.users[2],chat=await f.open(actor),requestId=randomUUID();f.client.failPhoto=true;const first=await f.photo(actor,chat,'Resultado incerto',requestId).expect(202);await f.photo(actor,chat,'Resultado incerto',requestId).expect(202);assert.equal(f.client.sent.length,1);assert.equal(f.store.messages(chat.id).length,1);assert.equal(f.store.message(first.body.id).status,'uncertain');for(let i=0;i<100;i++){f.advance(minute);await f.agent.followups.check();}assert.equal(f.client.sent.length,1);
 });
 test('request ID cannot be reused for another caption or file',async t=>{
  const f=await fixture(t),actor=f.users[2],chat=await f.open(actor),requestId=randomUUID();await f.photo(actor,chat,'Original',requestId).expect(201);await f.photo(actor,chat,'Diferente',requestId).expect(409);assert.equal(f.client.sent.length,1);

@@ -28,9 +28,9 @@ export function messageToolsRoutes({app,store,accounts,agent,whatsapp,getChat,vi
    try{
     const providerId=chat.channel==='simulator'?null:await whatsapp.sendPhoto(chat,{type:info.type,data:req.file.buffer,name:'foto.'+info.extension},transportCaption);
     store.run("UPDATE messages SET status='sent',provider_id=?,sent_at=? WHERE id=?",providerId||null,agent.now(),message.id);
-   }catch(error){store.run("UPDATE messages SET status='failed',error=? WHERE id=?",'Não foi possível confirmar o envio da foto. Confira no WhatsApp antes de selecionar e enviar novamente.',message.id);store.event('photo_error','O envio de uma foto não foi confirmado. Confira o chat e a conexão.');}
+   }catch(error){store.run('UPDATE messages SET status=?,error=? WHERE id=?',error.uncertain?'uncertain':'failed','Não foi possível confirmar o envio da foto. Confira no WhatsApp antes de selecionar e enviar novamente.',message.id);store.event('photo_error','O envio de uma foto não foi confirmado. Confira o chat e a conexão.');}
    store.changed();return store.message(message.id);
-  });res.status(result.status==='failed'?502:201).json(result.status==='failed'?{error:result.error,message:result}:result);
+  });res.status(result.status==='failed'?502:result.status==='uncertain'?202:201).json(result.status==='failed'?{error:result.error,message:result}:result);
  });
  app.patch('/api/chats/:id/messages/:messageId',async(req,res)=>{
   const input=z.object({body:z.string().trim().max(4000),version:z.number().int().min(0),editVersion:z.number().int().min(0)}).strict().parse(req.body);

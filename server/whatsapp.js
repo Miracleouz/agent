@@ -7,6 +7,7 @@ import {connectionError,safeConnectionDetail,authenticationTimeout} from './conn
 import {WhatsAppSync} from './whatsapp-sync.js';
 import {WhatsAppReadSync} from './whatsapp-read.js';
 import {WhatsAppAvatars} from './whatsapp-avatars.js';
+import {sendConfirmed} from './whatsapp-send.js';
 const {Client,LocalAuth,MessageMedia}=wa;
 export class WhatsApp {
  constructor(store,dataDir,{clientFactory=options=>new Client(options),logger=console}={}){this.store=store;this.dataDir=dataDir;this.clientFactory=clientFactory;this.logger=logger;this.client=null;this.status='disconnected';this.qr=null;this.error=null;this.number=null;this.receiver=null;this.generation=0;this.mediaTasks=new Set();this.syncer=new WhatsAppSync(this);this.readSync=new WhatsAppReadSync(this);this.avatars=new WhatsAppAvatars(this);}
@@ -77,7 +78,7 @@ export class WhatsApp {
   if(/@g\.us$|@broadcast$|@newsletter$/.test(chat.phone))throw new Error('O envio para grupos é bloqueado.');
   const numbered=actions?.length&&['close_order','help_yes','delivery_pickup'].includes(actions[0].id);
   const menu=numbered?'\n\n'+actions.map((a,i)=>`${i+1} — ${a.label}`).join('\n')+(actions.length===2?'\n\nResponda *1* ou *2*.':'\n\nResponda *1*, *2* ou *3*.'):actions?.length?'\n\n'+actions.map(a=>a.id==='more'?'↪ Digite *MAIS* para ver mais opções.':'👤 Digite *ATENDENTE* para falar com uma pessoa.').join('\n'):'';
-  const result=await this.client.sendMessage(chat.phone,body+menu,{sendSeen:false});if(!result?.id?._serialized)throw new Error('Não foi possível confirmar o envio da mensagem.');await this.markRead(chat);return result.id._serialized;
+  return sendConfirmed(this,chat,body+menu);
  }
  async resolveContact(phone){
   if(this.status!=='ready'||!this.client)throw Object.assign(new Error('Conecte o WhatsApp antes de iniciar uma conversa.'),{status:409});
@@ -96,7 +97,7 @@ export class WhatsApp {
   if(!/^\d+@(c\.us|lid|s\.whatsapp\.net)$/.test(chat.phone))throw new Error('O envio para grupos é bloqueado.');
   const info=photoInfo(photo.data);if(info.type!==photo.type)throw new Error('Foto inválida.');
   const media=new MessageMedia(info.type,photo.data.toString('base64'),photo.name);
-  const result=await this.client.sendMessage(chat.phone,media,{caption,sendSeen:false});if(!result?.id?._serialized)throw new Error('Não foi possível confirmar o envio da foto.');await this.markRead(chat);return result.id._serialized;
+  return sendConfirmed(this,chat,media,{caption});
  }
  async editMessage(chat,providerId,body){
   const denied=message=>Object.assign(new Error(message),{definite:true});

@@ -116,7 +116,7 @@ export function createApp({store,whatsapp,production=false,appUrl=process.env.AP
    typing.delete(chat.id+':'+user.id);const transportBody=store.settings().signHumanMessages?`*${user.name}*: ${body}`:body;
    return agent.reply(chat,body,[],'owner',{author:user,transportBody});
   });
-  res.status(result.status==='failed'?502:201).json(result.status==='failed'?{error:result.error,message:result}:result);
+  res.status(result.status==='failed'?502:result.status==='uncertain'?202:201).json(result.status==='failed'?{error:result.error,message:result}:result);
  });
  app.post('/api/simulator/message',async(req,res)=>{
   const input=z.object({phone:z.string().regex(/^demo-[a-zA-Z0-9-]{1,50}$/).default('demo-cliente'),name:z.string().trim().min(1).max(80).default('Cliente de teste'),body:z.string().trim().min(1).max(4000),isGroup:z.boolean().optional()}).parse(req.body);
