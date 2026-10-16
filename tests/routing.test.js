@@ -37,7 +37,7 @@ for(const [actorIndex,profile] of profiles.entries())for(const [messageIndex,bod
   const version=opened.chat.routing_version;
   if(flow===0){
    await post(actor.client,url+'/send',{body:'Vou conferir os itens.',version}).expect(201);assert.equal(sent.length,count+1);assert.equal(sent.at(-1).body,`*${actor.name}*: Vou conferir os itens.`);await assertVisibility(users,id,actor.id);
-   await post(actor.client,url+'/release',{version}).expect(200);assert.equal(store.chat(id).assigned_user_id,null);assert.equal(store.chat(id).mode,'manual');assert(store.chat(id).unread>0);await assertVisibility(users,id,null);
+   await post(actor.client,url+'/release',{version}).expect(200);assert.equal(store.chat(id).assigned_user_id,null);assert.equal(store.chat(id).mode,'manual');assert.equal(store.chat(id).unread,0);await assertVisibility(users,id,null);
    await post(other.client,url+'/open').expect(200);assert.equal(store.chat(id).assigned_user_id,other.id);await assertVisibility(users,id,other.id);assert.equal(sent.length,count+1);
   }else if(flow===2){
    await post(actor.client,url+'/open').expect(200);assert.equal(store.chat(id).routing_version,version);await f.receive('Tenho mais uma dúvida');assert.equal(store.chat(id).assigned_user_id,actor.id);assert.equal(store.chat(id).unread,1);

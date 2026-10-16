@@ -138,14 +138,14 @@ test('Admin registers five users in a batch, changes roles and transfers chats b
   await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBeTruthy();
  }finally{for(const context of contexts)await context.close();}
 });
-test('opening claims a queue chat, releasing returns it to others, and groups remain read only',async({page,browser,baseURL})=>{
+test('released read chats are available in history without fake unreads and groups remain read only',async({page,browser,baseURL})=>{
  await page.goto('/');await page.getByLabel('E-mail',{exact:true}).fill('marina@example.test');await page.getByLabel('Senha',{exact:true}).fill('owner-pass-test-123');await page.getByRole('button',{name:'Entrar no painel',exact:true}).click();
  await page.getByRole('tab',{name:/Todos os atendimentos/}).click();await page.locator('.chat-item').filter({hasText:'Cliente de teste'}).first().click();await page.getByRole('button',{name:'Liberar conversa',exact:true}).click();
  const contexts=[],errors=[];
  async function login(email){const context=await browser.newContext({baseURL,viewport:{width:1440,height:1050}});contexts.push(context);const target=await context.newPage();target.on('pageerror',error=>errors.push(error.message));await target.goto('/');await target.getByLabel('E-mail',{exact:true}).fill(email);await target.getByLabel('Senha',{exact:true}).fill('team-ui-fixture-12345');await target.getByRole('button',{name:'Entrar no painel',exact:true}).click();await expect(target.getByRole('heading',{name:'Conversas',exact:true})).toBeVisible();return target;}
  try{
   const one=await login('comercial3@example.test'),two=await login('comercial1@example.test');
-  await expect(one.getByRole('tab',{name:/Não lidas/})).toHaveAttribute('aria-selected','true');await expect(one.locator('.chat-item')).toHaveCount(1);await expect(two.locator('.chat-item')).toHaveCount(1);
+  await expect(one.getByRole('tab',{name:/Não lidas/})).toHaveAttribute('aria-selected','true');await expect(one.locator('.chat-item')).toHaveCount(0);await one.getByRole('tab',{name:/Histórico/}).click();await two.getByRole('tab',{name:/Histórico/}).click();await expect(one.locator('.chat-item')).toHaveCount(1);await expect(two.locator('.chat-item')).toHaveCount(1);
   await one.locator('.chat-item').first().click();await expect(one.getByRole('tab',{name:/Conversas · Comercial Tres/})).toHaveAttribute('aria-selected','true');await expect(one.locator('.team-chat-controls')).toContainText('Comercial Tres');await expect(two.locator('.chat-item')).toHaveCount(0);
   await one.getByRole('tab',{name:/Não lidas/}).click();await expect(one.locator('.chat-item')).toHaveCount(0);await one.getByRole('tab',{name:/Conversas · Comercial Tres/}).click();await one.locator('.chat-item').first().click();
   await one.getByLabel('Mensagem manual').fill('Atendimento exclusivo com o meu nome.');await one.getByRole('button',{name:'Enviar mensagem',exact:true}).click();await expect(one.locator('.message-role').filter({hasText:'Comercial Tres'})).toBeVisible();

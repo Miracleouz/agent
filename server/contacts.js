@@ -27,6 +27,12 @@ export function contactRoutes({app,store,accounts,agent,whatsapp}){
   store.run('UPDATE contacts SET name=?,phone=?,company=?,updated=? WHERE id=?',input.name??previous.name,phone,input.company??previous.company,Date.now(),previous.id);store.changed();res.json(contact(previous.id));
  });
  app.delete('/api/contacts/:id',accounts.adminOnly,(req,res)=>{contact(req.params.id);store.run('DELETE FROM contacts WHERE id=?',req.params.id);store.changed();res.json({ok:true});});
+ app.get('/api/contacts/:id/history',(req,res)=>{
+  const person=contact(req.params.id),aliases=[person.phone+'@c.us',person.phone+'@s.whatsapp.net'],matches=store.all("SELECT DISTINCT c.id FROM chats c LEFT JOIN whatsapp_chat_aliases a ON a.chat_id=c.id WHERE c.channel='whatsapp' AND c.provider='qr' AND (c.phone IN (?,?) OR a.alias IN (?,?))",...aliases,...aliases);
+  if(matches.length>1)throw fail('Há mais de um histórico para este contato. Abra a conversa existente em Conversas.',409);
+  const chat=matches[0]&&store.chat(matches[0].id);if(chat?.assigned_user_id&&chat.assigned_user_id!==req.user.id&&req.user.role!=='admin')throw fail('Esta conversa está com outro usuário.',403);
+  if(chat)whatsapp.loadHistory?.(chat).catch(()=>{});res.json({contact:{id:person.id,name:person.name},chat:chat||null,messages:chat?store.messages(chat.id):[]});
+ });
  app.post('/api/contacts/:id/open',async(req,res)=>{
   z.object({}).strict().parse(req.body||{});const initial=contact(req.params.id);
   if(whatsapp.snapshot().status!=='ready')throw fail('Conecte o WhatsApp antes de iniciar uma conversa.',409);

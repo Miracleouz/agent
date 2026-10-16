@@ -1,15 +1,15 @@
-# Listas e histórico do WhatsApp — versão 1.12.0
+# Listas e histórico do WhatsApp — versão 1.13.0
 
-As versões anteriores criavam conversas privadas somente a partir de mensagens novas e usavam uma agenda cadastrada no painel. Por isso, conectar por QR não preenchia essas listas com os dados já existentes no WhatsApp. A versão 1.12.0 acrescenta essa sincronização.
+As versões anteriores criavam conversas privadas somente a partir de mensagens novas e usavam uma agenda cadastrada no painel. Por isso, conectar por QR não preenchia essas listas com os dados já existentes no WhatsApp. A versão 1.12.0 acrescentou a sincronização das listas. A versão 1.13.0 passa a buscar automaticamente 30 dias disponíveis de histórico e separa Histórico de Não lidas; veja [HISTORICO_MENSAL_E_NAO_LIDAS.md](HISTORICO_MENSAL_E_NAO_LIDAS.md).
 
 ## Como usar
 
 1. Atualize o código e recrie o serviço Docker na mesma instalação, preservando `.env`, o volume de dados e ajustes próprios. Siga [ATUALIZAR_DOCKER.md](../ATUALIZAR_DOCKER.md).
 2. Abra o painel e confirme que a conexão mostra **Conectado**. Após conectar ou restaurar a sessão, o Cota consulta conversas, grupos e contatos salvos disponíveis no WhatsApp Web.
-3. As conversas livres aparecem em **Não lidas**, que é a fila compartilhada de atendimento. **Todos os atendimentos** permite ao Admin ver também os chats atribuídos. Abrir uma conversa livre continua assumindo o atendimento e pausando o agente naquele chat.
+3. Conversas livres já lidas aparecem em **Histórico**. Somente mensagens novas recebidas pelo Cota entram em **Não lidas**. **Todos os atendimentos** permite ao Admin ver também os chats atribuídos. Abrir uma conversa livre continua assumindo o atendimento e pausando o agente naquele chat.
 4. A aba **Grupos** recebe a lista de grupos. Continua sendo apenas para consulta: não há envio ou respostas automáticas, download de anexos nem busca de mensagens antigas de grupos.
 5. A aba **Contatos** recebe contatos salvos que o WhatsApp disponibiliza com número válido. A sincronização acrescenta contatos sem sobrescrever nomes ou empresas ajustados no Cota. Editar/excluir na agenda do Cota não altera a agenda do celular; uma sincronização posterior pode trazer novamente um contato que continua salvo no WhatsApp.
-6. Ao abrir uma conversa privada, o Cota busca **até 50 mensagens recentes disponíveis**. Não se trata de importar todo o backup do celular. Mídias anteriores ficam como aviso, sem download; fotos já registradas no Cota permanecem preservadas.
+6. Ao conectar, o Cota busca **os últimos 30 dias disponíveis das conversas privadas**, aumentando a quantidade consultada até alcançar o início do período ou esgotar a origem. Ao abrir o chat, a mesma importação é aproveitada ou iniciada se necessário. Não se trata de importar todo o backup do celular. Mídias anteriores ficam como aviso, sem download; fotos já registradas no Cota permanecem preservadas.
 
 O cartão de sincronização informa quantidade de conversas, grupos e contatos encontrados e se houve falha parcial. Um Admin pode usar **Sincronizar WhatsApp**, na aba WhatsApp ou Contatos, para tentar novamente sem desconectar a sessão. Se faltar algum dado, confira o cartão e `docker compose logs --tail=100 cota`; erros técnicos aparecem com o prefixo `[WhatsApp sync]`.
 
@@ -23,7 +23,7 @@ Textos enviados anteriormente pelo celular aparecem com o rótulo **Enviado pelo
 
 ## Responsáveis, permissões e identidades
 
-Sincronizar não transfere chats, não remove responsáveis, não reativa pausas e não altera pedidos ou alertas existentes. Admin e Comercial continuam com as mesmas permissões. Sincronizar manualmente é uma ação de Admin; todos consultam os dados permitidos pelas suas contas.
+Sincronizar não transfere chats, não remove responsáveis, não reativa pausas e não altera pedidos ou alertas existentes. Admin e Comercial continuam com as mesmas permissões. Clique no nome em Contatos para consultar o histórico sem assumir o atendimento. Liberar um chat lido não cria mensagem não lida. Sincronizar manualmente é uma ação de Admin; todos consultam os dados permitidos pelas suas contas.
 
 Os identificadores PN/LID disponibilizados pelo WhatsApp são associados ao mesmo chat. Se já existirem dois históricos distintos para identificadores relacionados, o Cota não os une nem transfere responsáveis automaticamente: mantém os registros e sinaliza sincronização incompleta. Contatos com identificador LID sem telefone confirmado não recebem um número inventado.
 
@@ -31,7 +31,7 @@ Falhas de uma consulta não apagam dados locais. Chamadas têm limite de espera;
 
 ## Verificação
 
-Em 16/10/2026, passaram **2.496 testes de servidor**, incluindo **310 novos testes de sincronização**, **19 testes de navegador** e o build de produção. Dois testes novos de navegador conferem as listas depois de conectar, consulta do histórico, grupos sem envio, nova sincronização da agenda e preservação do responsável numa transferência. A matriz nova de servidor combina **cinco perfis × dez nomes com variações de escrita × seis fluxos = 300 cenários**:
+Na versão 1.12.0, em 16/10/2026, passaram **2.496 testes de servidor**, incluindo **310 testes de sincronização**, **19 testes de navegador** e o build de produção. Na versão 1.13.0, passaram **2.801 testes de servidor**, **20 de navegador** e o build, incluindo 305 novos testes mensais. Dois testes novos de navegador conferem as listas depois de conectar, consulta do histórico, grupos sem envio, nova sincronização da agenda e preservação do responsável numa transferência. A matriz nova de servidor combina **cinco perfis × dez nomes com variações de escrita × seis fluxos = 300 cenários**:
 
 - Listas e histórico sem envio de mensagens.
 - Preservação de responsável, pausa, alertas, nome ajustado e mensagem já corrigida.

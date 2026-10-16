@@ -42,11 +42,12 @@ Um Admin cadastra as contas em **Equipe**, com senha de pelo menos dez caractere
 As abas de atendimento são:
 
 - **Conversas · seu nome:** atendimentos que estão com você, incluindo novas mensagens desses clientes.
-- **Não lidas:** fila compartilhada de conversas sem responsável. Clique para assumir automaticamente; a conversa sai dessa fila e abre na sua aba pessoal, com o bot pausado. Outro Comercial deixa de vê-la.
+- **Não lidas:** mensagens novas ainda não lidas em conversas sem responsável. Clique para assumir automaticamente; a conversa sai dessa fila e abre na sua aba pessoal, com o bot pausado. Outro Comercial deixa de vê-la.
+- **Histórico:** conversas livres já lidas ou importadas. Abrir permite consultar e assumir o atendimento; liberar um chat lido o torna disponível aqui.
 - **Grupos:** lista e novas mensagens para consulta, sem respostas automáticas ou manuais pelo painel. A lista carrega ao conectar o WhatsApp. O histórico anterior à conexão não é importado, e anexos aparecem como aviso sem download.
 - **Todos os atendimentos:** visão adicional do Admin. Abrir uma conversa de outro responsável permite acompanhar, sem tomar o atendimento nem limpar as mensagens não lidas dele.
 
-Para devolver um chat à equipe, use **Liberar conversa**. Ele sai da sua aba pessoal e volta para **Não lidas**, disponível aos outros usuários. O histórico, o pedido e os alertas são mantidos. A liberação não envia mensagem e deixa o bot pausado aguardando a equipe; não agenda lembretes. A palavra Não lidas identifica a fila de trabalho: uma conversa liberada volta para lá mesmo se o histórico já foi lido.
+Para devolver um chat à equipe, use **Liberar conversa**. Ele sai da sua aba pessoal e fica disponível aos outros usuários em **Histórico**, ou em **Não lidas** se existir mensagem nova pendente. O histórico, o pedido e os alertas são mantidos. A liberação não envia mensagem e deixa o bot pausado aguardando a equipe; não agenda lembretes. **Não lidas** contém somente mensagens novas. Importar histórico, liberar um chat lido ou desativar seu responsável não cria uma indicação de mensagem nova.
 
 **Reativar agente** volta a permitir respostas a novas mensagens, mantendo a conversa com o responsável. O fim de uma pausa temporária também mantém esse responsável. Para disponibilizar aos outros, use **Liberar conversa** ou uma transferência por Admin. Se dois usuários abrirem o mesmo chat juntos, apenas um assume; o outro Comercial recebe aviso de que a conversa já foi assumida.
 
@@ -66,7 +67,7 @@ O lote aceita até 50 pessoas e só é aplicado se todos os registros forem vál
 
 ## Contatos e primeira mensagem manual
 
-Após conectar o WhatsApp, conversas, grupos e contatos salvos disponíveis são sincronizados automaticamente. Um Admin pode usar **Sincronizar WhatsApp** na aba WhatsApp ou Contatos para tentar novamente. Conversas livres aparecem em **Não lidas**; o Admin também possui **Todos os atendimentos**. Ao abrir um chat privado, são carregadas até 50 mensagens recentes disponíveis para consulta, sem respostas automáticas ao histórico antigo. Veja [SINCRONIZACAO_WHATSAPP.md](docs/SINCRONIZACAO_WHATSAPP.md).
+Após conectar o WhatsApp, conversas, grupos e contatos salvos disponíveis são sincronizados automaticamente. Um Admin pode usar **Sincronizar WhatsApp** na aba WhatsApp ou Contatos para tentar novamente. Conversas livres já lidas aparecem em **Histórico**; só mensagens novas entram em **Não lidas**. O Admin também possui **Todos os atendimentos**. A importação busca automaticamente os últimos 30 dias disponíveis das conversas privadas, sem respostas ao histórico antigo. Em Contatos, clique no nome para consultar o histórico sem assumir ou enviar. Veja [SINCRONIZACAO_WHATSAPP.md](docs/SINCRONIZACAO_WHATSAPP.md).
 
 1. Abra **Contatos → Novo contato**. Informe nome, WhatsApp com DDD e, se quiser, empresa. Para números internacionais, use `+` e o código do país. No Brasil, `(11) 99999-9999` e `+55 (11) 99999-9999` identificam o mesmo cadastro.
 2. Conecte o WhatsApp da loja por QR e clique em **Conversar**. O número é consultado antes de abrir; se não estiver no WhatsApp, aparece um aviso. O sistema reaproveita o histórico confirmado e coloca uma conversa livre sob sua responsabilidade em modo manual.
@@ -158,6 +159,8 @@ A versão **1.11.0** adiciona envio de fotos e edição de textos/legendas pelo 
 A versão **1.11.1** melhora o diagnóstico de falha ao gerar QR e protege contra reconexões simultâneas. A espera do carregamento da autenticação passa a 90 segundos por padrão. Não altera o banco nem apaga a sessão; problemas específicos de perfil, permissões, DNS ou rede exigem conferir o código e o log da instalação.
 
 A versão **1.12.0** sincroniza listas de conversas, grupos e contatos salvos disponíveis no WhatsApp, e busca até 50 mensagens recentes ao abrir uma conversa privada. O histórico importado é apenas para consulta e nunca autoriza envios automáticos. O botão **Sincronizar WhatsApp** permite nova tentativa sem limpar a sessão. Responsáveis, pausas, pedidos, mensagens e fotos existentes são preservados.
+
+A versão **1.13.0** busca o histórico disponível dos últimos 30 dias por paginação, sem limite fixo de 50 mensagens. **Histórico** e **Não lidas** ficam separados; liberar um chat lido não o marca como novo. Clique no nome em **Contatos** para consultar sem assumir o atendimento. Na primeira atualização, os contadores antigos de WhatsApp são zerados uma vez para remover a antiga marcação de fila; mensagens, responsáveis, estoque e alertas são preservados. Veja [HISTORICO_MENSAL_E_NAO_LIDAS.md](docs/HISTORICO_MENSAL_E_NAO_LIDAS.md).
 
 ## Cotações configuradas
 

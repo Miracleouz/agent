@@ -62,7 +62,7 @@ export function createAccounts(store,cookie){
     store.run('UPDATE users SET name=?,email=?,password=?,role=?,active=? WHERE id=?',input.name??user.name,input.email??user.email,hash,nextRole,nextActive,user.id);
     if(user.id==='owner')store.run('UPDATE owner SET name=?,email=?,password=? WHERE id=1',input.name??user.name,input.email??user.email,hash);
     if(input.password||input.email||input.active===false||nextRole!==user.role)store.run('DELETE FROM sessions WHERE user_id=?',user.id);
-    if(input.active===false)store.run("UPDATE chats SET assigned_user_id=NULL,mode='manual',pause_until=NULL,unread=MAX(unread,1),routing_version=routing_version+1,followup_due_at=NULL,followup_menu=0,followup_state=CASE WHEN followup_state IN ('scheduled','sending') THEN 'cancelled' ELSE followup_state END WHERE assigned_user_id=?",user.id);
+    if(input.active===false)store.run("UPDATE chats SET assigned_user_id=NULL,mode='manual',pause_until=NULL,routing_version=routing_version+1,followup_due_at=NULL,followup_menu=0,followup_state=CASE WHEN followup_state IN ('scheduled','sending') THEN 'cancelled' ELSE followup_state END WHERE assigned_user_id=?",user.id);
    });
    if(input.active===false||input.role&&input.role!==user.role)clearPresence(user.id);store.event('team',`Conta de ${input.name??user.name} atualizada por ${req.user.name}.`);res.json(safeUser(user.id));
   });

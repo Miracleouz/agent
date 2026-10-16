@@ -5,17 +5,18 @@ const privateId=id=>/^\d+@(c\.us|lid|s\.whatsapp\.net)$/.test(id||'');
 const groupId=id=>/^\d+(?:-\d+)?@g\.us$/.test(id||'');
 const idOf=value=>value?.id?._serialized;
 const stamp=value=>Number.isFinite(value)&&value>0?Math.min(value*1000,Date.now()):0;
+export const historyDays=30,historyWindow=historyDays*86400000;
 function bounded(fn,signal,ms){return new Promise((resolve,reject)=>{let done=false;const finish=(error,result)=>{if(done)return;done=true;clearTimeout(timer);signal.removeEventListener('abort',abort);error?reject(error):resolve(result);},abort=()=>finish(new Error('Sincronização cancelada.')),timer=setTimeout(()=>finish(new Error('Tempo limite ao consultar dados do WhatsApp.')),ms);signal.addEventListener('abort',abort,{once:true});if(signal.aborted)return abort();Promise.resolve().then(fn).then(result=>finish(null,result),finish);});}
 export class WhatsAppSync{
- constructor(whatsapp,{timeout=20000}={}){this.wa=whatsapp;this.store=whatsapp.store;this.timeout=timeout;this.reset();}
- reset(){this.controller?.abort();this.controller=new AbortController();this.promise=null;this.histories=new Map();this.remotes=new Map();this.state={status:'idle',chats:0,groups:0,contacts:0,completedAt:null,error:null};}
+ constructor(whatsapp,{timeout=20000,historyTimeout=60000}={}){this.wa=whatsapp;this.store=whatsapp.store;this.timeout=timeout;this.historyTimeout=historyTimeout;this.reset();}
+ reset(){this.controller?.abort();this.controller=new AbortController();this.promise=null;this.histories=new Map();this.remotes=new Map();this.state={status:'idle',chats:0,groups:0,contacts:0,completedAt:null,error:null,historyDays,historiesDone:0,historiesTotal:0,stage:'lists'};}
  snapshot(){return{...this.state};}
  active(client,generation){return this.wa.client===client&&this.wa.generation===generation&&this.wa.status==='ready';}
  report(error){this.wa.logger.error(`[WhatsApp sync] ${safeConnectionDetail(error)}`);}
  run(){
   if(this.wa.status!=='ready'||!this.wa.client)return Promise.reject(Object.assign(new Error('Aguarde o WhatsApp ficar Conectado antes de sincronizar.'),{status:409}));
   if(this.promise)return this.promise;
-  const client=this.wa.client,generation=this.wa.generation,signal=this.controller.signal;this.histories.clear();this.state={status:'loading',chats:0,groups:0,contacts:0,completedAt:null,error:null};this.store.changed();
+  const client=this.wa.client,generation=this.wa.generation,signal=this.controller.signal;this.histories.clear();this.cutoff=Date.now()-historyWindow;this.state={status:'loading',chats:0,groups:0,contacts:0,completedAt:null,error:null,historyDays,historiesDone:0,historiesTotal:0,stage:'lists'};this.store.changed();
   const task=this.perform(client,generation,signal).catch(error=>{if(this.active(client,generation)&&!signal.aborted){this.report(error);this.state={...this.state,status:'error',error:'A sincronização falhou. Os dados já salvos foram preservados. Tente Sincronizar WhatsApp novamente.'};this.store.event('whatsapp_sync_error',this.state.error);}return this.snapshot();});this.promise=task;task.finally(()=>{if(this.promise===task)this.promise=null;}).catch(()=>{});return task;
  }
  async perform(client,generation,signal){
@@ -45,7 +46,7 @@ export class WhatsAppSync{
     const params=[...aliases],slots=params.map(()=>'?').join(','),matches=this.store.all(`SELECT DISTINCT c.id FROM chats c LEFT JOIN whatsapp_chat_aliases a ON a.chat_id=c.id WHERE c.channel='whatsapp' AND c.provider='qr' AND (c.phone IN (${slots}) OR a.alias IN (${slots}))`,...params,...params);
     if(matches.length>1){failures++;continue;}
     let chat=matches[0]&&this.store.chat(matches[0].id);const name=String(remote.name||id.split('@')[0]).slice(0,150);
-    if(!chat){const chatId=randomUUID(),phone=params.find(alias=>alias.endsWith('@c.us'))||id;this.store.run("INSERT INTO chats(id,phone,name,channel,provider,updated,last_inbound,unread) VALUES(?,?,?,'whatsapp','qr',?,0,?)",chatId,phone,name,stamp(remote.timestamp),Math.max(0,Math.min(99999,Math.trunc(Number(remote.unreadCount)||0))));chat=this.store.chat(chatId);}
+    if(!chat){const chatId=randomUUID(),phone=params.find(alias=>alias.endsWith('@c.us'))||id;this.store.run("INSERT INTO chats(id,phone,name,channel,provider,updated,last_inbound,unread) VALUES(?,?,?,'whatsapp','qr',?,0,0)",chatId,phone,name,stamp(remote.timestamp));chat=this.store.chat(chatId);}
     else if(chat.name===chat.phone||chat.name===chat.phone.split('@')[0])this.store.run('UPDATE chats SET name=? WHERE id=?',name,chat.id);
     for(const alias of aliases)this.store.run('INSERT OR IGNORE INTO whatsapp_chat_aliases VALUES(?,?)',alias,chat.id);
     this.remotes.set(chat.id,remote);this.state.chats++;if(remote.lastMessage)this.importMessage(chat,remote.lastMessage);
@@ -57,10 +58,13 @@ export class WhatsAppSync{
     this.store.run('INSERT OR IGNORE INTO contacts VALUES(?,?,?,?,?,?,?)',randomUUID(),name,phone,'',null,Date.now(),Date.now());this.state.contacts++;
    }
   });
+  const jobs=[...this.remotes.keys()].map(id=>this.store.chat(id)).filter(Boolean);this.state.historiesTotal=jobs.length;this.state.stage='history';this.store.changed();let next=0;
+  const worker=async()=>{while(checked()&&next<jobs.length){const chat=jobs[next++];const result=await this.history(chat);if(!checked())return;if(result===false)failures++;this.state.historiesDone++;this.store.changed();}};
+  await Promise.all([worker(),worker()]);if(!checked())return this.snapshot();
   this.state={...this.state,status:failures?'partial':'ready',completedAt:Date.now(),error:failures?'Alguns dados não puderam ser carregados. Use Sincronizar WhatsApp para tentar novamente; os dados existentes foram preservados.':null};this.store.event(failures?'whatsapp_sync_error':'whatsapp_sync',`Sincronização: ${this.state.chats} conversas, ${this.state.groups} grupos e ${this.state.contacts} contatos encontrados.`);return this.snapshot();
  }
  importMessage(chat,message){
-  const providerId=idOf(message),created=stamp(message.timestamp);if(!providerId||!created||message.isStatus)return;
+  const providerId=idOf(message),created=stamp(message.timestamp);if(!providerId||!created||created<(this.cutoff||Date.now()-historyWindow)||message.isStatus)return;
   const incoming=!(message.fromMe||message.id?.fromMe),from=message.from,to=message.to;
   // A live inbound must reach the verified receiver first; a history read cannot consume it.
   if(incoming&&(!Number.isFinite(this.wa.readyAt)||message.timestamp>=this.wa.readyAt))return;
@@ -74,9 +78,17 @@ export class WhatsAppSync{
   if(chat.channel!=='whatsapp'||chat.provider!=='qr'||this.wa.status!=='ready')return Promise.resolve();
   if(this.histories.has(chat.id))return this.histories.get(chat.id);
   const client=this.wa.client,generation=this.wa.generation,signal=this.controller.signal;
-  const task=(async()=>{try{let remote=this.remotes.get(chat.id);if(!remote&&typeof client.getChatById==='function')remote=await bounded(()=>client.getChatById(chat.phone),signal,this.timeout);if(!this.active(client,generation)||signal.aborted||typeof remote?.fetchMessages!=='function')return;
-   const messages=await bounded(()=>remote.fetchMessages({limit:50}),signal,this.timeout);if(!this.active(client,generation)||signal.aborted)return;
-   this.store.transaction(()=>{for(const message of (Array.isArray(messages)?messages:[]).slice(-50))this.importMessage(chat,message);});this.store.changed();
-  }catch(error){if(this.active(client,generation)&&!signal.aborted){this.report(error);this.store.event('whatsapp_history_error','Não foi possível carregar mensagens recentes de um chat. O histórico já salvo foi preservado. Sincronize novamente para tentar outra vez.');}}})();this.histories.set(chat.id,task);return task;
+  const cutoff=this.cutoff||Date.now()-historyWindow,task=(async()=>{try{
+   this.store.run("INSERT INTO whatsapp_history_sync VALUES(?,?,NULL,?,'loading',NULL) ON CONFLICT(chat_id) DO UPDATE SET cutoff=excluded.cutoff,last_sync=excluded.last_sync,status='loading',error=NULL",chat.id,cutoff,Date.now());this.store.changed();
+   let remote=this.remotes.get(chat.id);if(!remote&&typeof client.getChatById==='function')remote=await bounded(()=>client.getChatById(chat.phone),signal,this.timeout);if(!this.active(client,generation)||signal.aborted)return false;if(typeof remote?.fetchMessages!=='function')throw new Error('O WhatsApp não disponibilizou a consulta do histórico deste chat.');
+   let limit=200,oldest=null;const seen=new Set();
+   while(this.active(client,generation)&&!signal.aborted){
+    const messages=await bounded(()=>remote.fetchMessages({limit}),signal,this.historyTimeout);if(!this.active(client,generation)||signal.aborted)return false;if(!Array.isArray(messages))throw new Error('Resposta de histórico inválida.');
+    const times=messages.map(message=>stamp(message.timestamp)).filter(Boolean);oldest=times.length?times.reduce((minimum,value)=>Math.min(minimum,value),Infinity):null;let added=0;
+    this.store.transaction(()=>{for(const message of messages){const id=idOf(message);if(!id||seen.has(id))continue;seen.add(id);added++;this.importMessage(chat,message);}});this.store.changed();
+    if(oldest!==null&&oldest<=cutoff||messages.length<limit){this.store.run('UPDATE whatsapp_history_sync SET status=?,oldest_at=?,last_sync=?,error=NULL WHERE chat_id=?',oldest!==null&&oldest<=cutoff?'complete':'available',oldest,Date.now(),chat.id);this.store.changed();return true;}
+    if(!added)throw new Error('O WhatsApp repetiu a mesma página sem disponibilizar mensagens mais antigas.');limit*=2;
+   }return false;
+  }catch(error){if(this.active(client,generation)&&!signal.aborted){this.report(error);const detail='Não foi possível concluir os últimos 30 dias. O histórico salvo foi mantido. Use Sincronizar WhatsApp para continuar.';this.store.run("UPDATE whatsapp_history_sync SET status='partial',error=?,last_sync=? WHERE chat_id=?",detail,Date.now(),chat.id);this.store.event('whatsapp_history_error',detail);}return false;}})();this.histories.set(chat.id,task);return task;
  }
 }
