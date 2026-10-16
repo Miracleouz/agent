@@ -95,3 +95,25 @@ test('ROBINHO greets site visitors and quotes all items including finished and c
  await send('4 PK 650');await expect(page.locator('.message-body').last()).toContainText('peça pronta');await expect(page.locator('.message-body').last()).toContainText('por friso × 4 frisos');
  await page.screenshot({path:'test-results/robinho-pk-quote.png',fullPage:true});
 });
+test('team member signs replies, shows typing and confirms orders in the shared inbox',async({page,browser,baseURL})=>{
+ await page.goto('/');await page.getByLabel('E-mail',{exact:true}).fill('marina@example.test');await page.getByLabel('Senha',{exact:true}).fill('owner-pass-test-123');await page.getByRole('button',{name:'Entrar no painel',exact:true}).click();
+ await page.getByRole('button',{name:'Equipe',exact:true}).click();await page.getByRole('button',{name:'Novo atendente',exact:true}).click();
+ await page.getByLabel('Nome do atendente',{exact:true}).fill('Rafael Costa');await page.getByLabel('E-mail do atendente',{exact:true}).fill('rafael@example.test');await page.getByLabel('Senha do atendente',{exact:true}).fill('rafael-pass-12345');await page.getByRole('button',{name:'Salvar atendente',exact:true}).click();
+ await expect(page.getByRole('cell',{name:'Rafael Costa',exact:true})).toBeVisible();await page.getByRole('button',{name:'Conversas',exact:true}).click();
+ async function incoming(body){await page.getByRole('button',{name:'Testar agente',exact:true}).click();await page.getByLabel('Mensagem do cliente').fill(body);await page.getByRole('button',{name:'Enviar teste',exact:true}).click();}
+ await incoming('pode separar');await expect(page.locator('.chat-notice')).toContainText('Cliente quer fechar pedido');
+ const context=await browser.newContext({baseURL,viewport:{width:1440,height:1050}});const colleague=await context.newPage();
+ try{
+  await colleague.goto('/');await colleague.getByLabel('E-mail',{exact:true}).fill('rafael@example.test');await colleague.getByLabel('Senha',{exact:true}).fill('rafael-pass-12345');await colleague.getByRole('button',{name:'Entrar no painel',exact:true}).click();
+  await expect(colleague.getByRole('button',{name:'Equipe',exact:true})).toHaveCount(0);await expect(colleague.getByRole('button',{name:'Estoque',exact:true})).toHaveCount(0);await expect(colleague.getByRole('button',{name:'WhatsApp',exact:true})).toHaveCount(0);
+  await colleague.locator('.chat-item').filter({hasText:'Cliente de teste'}).first().click();await colleague.getByRole('button',{name:'Assumir atendimento',exact:true}).click();await expect(colleague.locator('.team-chat-controls')).toContainText('Rafael Costa');
+  await colleague.getByLabel('Mensagem manual').fill('Olá! Vou conferir seu pedido.');await expect(page.locator('.typing-notice')).toContainText('Rafael Costa está digitando');
+  await colleague.getByRole('button',{name:'Enviar mensagem',exact:true}).click();await expect(page.locator('.message-role').filter({hasText:'Rafael Costa'})).toBeVisible();await expect(page.locator('.message-body').filter({hasText:'Vou conferir seu pedido'})).toBeVisible();
+  const result=await colleague.evaluate(async()=>{const data=await(await fetch('/api/bootstrap')).json();const chat=data.chats.find(c=>c.phone==='demo-cliente');return(await(await fetch(`/api/chats/${chat.id}/messages`)).json()).at(-1);});
+  expect(result.delivery_body).toBe('*Rafael Costa*: Olá! Vou conferir seu pedido.');expect(result.author_name).toBe('Rafael Costa');
+  await colleague.getByRole('button',{name:'Marcar pedido fechado',exact:true}).click();await expect(page.locator('.chat-notice').filter({hasText:'Pedido fechado.'})).toBeVisible();
+  await incoming('quero falar com atendente');await expect(page.locator('.chat-notice').filter({hasText:'também pediu para falar'})).toBeVisible();
+  await page.screenshot({path:'test-results/shared-team-order.png',fullPage:true});
+  await page.getByRole('button',{name:'Equipe',exact:true}).click();await page.getByRole('button',{name:'Desativar Rafael Costa',exact:true}).click();await expect(colleague.getByRole('button',{name:'Entrar no painel',exact:true})).toBeVisible({timeout:10000});
+ }finally{await context.close();}
+});

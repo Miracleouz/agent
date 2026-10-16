@@ -1,15 +1,17 @@
 # Cota · agente de cotações no WhatsApp
 
-Painel do dono para uma loja de correias industriais, abertas e sincronizadoras. React + Express + SQLite, com conexão do WhatsApp por QR Code e histórico persistente.
+Painel do dono e da equipe para uma loja de correias industriais, abertas e sincronizadoras. React + Express + SQLite, com conexão do WhatsApp por QR Code e histórico persistente.
 
 ## O que está implementado
 
-- Conta única do dono, senha com scrypt, sessão em cookie HttpOnly, proteção de origem e limitação de tentativas de login. Troca de senha encerra outras sessões.
+- Contas individuais de dono e atendentes, senha com scrypt, sessão em cookie HttpOnly, proteção de origem e limitação de tentativas de login. O dono cadastra, edita, redefine senhas e desativa contas em **Equipe**. Cada usuário pode trocar sua senha, encerrando somente suas outras sessões; desativação revoga o acesso e libera os chats para outro atendente, mantendo o agente pausado.
+- **Um WhatsApp para a equipe:** todos veem as mesmas conversas no mesmo servidor. A conexão por QR, o estoque, as configurações e a gestão de contas ficam com o dono. Cada chat manual tem um responsável; outro atendente não consegue enviar por cima dele. O dono pode assumir o atendimento explicitamente. O painel mostra quem está digitando, quem assumiu e o nome de quem enviou cada resposta. As mensagens humanas são assinadas no WhatsApp por padrão, por exemplo `*Carla Lima*: Olá, vou te atender.`; o dono pode alterar essa opção nas Configurações.
 - **ROBINHO:** no primeiro contato válido de cada cliente em uma janela de 24 horas, responde com “Olá, sou o agente ROBINHO, vou te ajudar no atendimento nesse momento”. Reconhece entradas como `oi vim pelo site`. Se a primeira mensagem já contiver um pedido, inclui a apresentação e a cotação na mesma resposta. O registro da apresentação é persistente; não existe envio de saudação por relógio, importação, reconexão ou cadastro de contato. Atendimento manual e agente desligado continuam sendo respeitados.
 - Caixa de entrada com aparência do WhatsApp, busca, filtros, histórico e atualização em tempo real. Clientes de teste são identificados e os totais de WhatsApp excluem simulações.
 - **Responder manual** pausa somente o chat escolhido por 5–120 minutos ou até reativação. O prazo padrão pode ser configurado. O agente volta para novas mensagens, sem responder retroativamente às antigas.
 - **Falar com atendente** destaca o chat com uma exclamação, confirma a transferência uma vez e pausa até reativação explícita. Áudios e anexos também são encaminhados a uma pessoa.
-- **Cotação ou compra:** reconhece pedidos de preço e orçamento, intenção de fechar uma compra, abreviações e erros comuns de escrita. Negação, pesquisa e perguntas de preço evitam um encaminhamento prematuro. Uma escolha ambígua, como apenas `2` ou `pode ser`, pede confirmação. `Quero a segunda`, `pode separar` e `quero fechar` geram o alerta **Quer fechar pedido** e pausam somente esse chat. O dono vê a opção e a cotação de referência; confirma itens, medidas, disponibilidade e pagamento antes de finalizar. O agente não confirma a venda nem reserva estoque.
+- **Cotação ou compra:** reconhece pedidos de preço e orçamento, intenção de fechar uma compra, abreviações e erros comuns de escrita. Negação, pesquisa e perguntas de preço evitam um encaminhamento prematuro. Uma escolha ambígua, como apenas `2` ou `pode ser`, pede confirmação. `Quero a segunda`, `pode separar`, `quero fechar` e `vou comprar` geram o alerta **Quer fechar pedido** e pausam somente esse chat. A equipe vê a opção e a cotação de referência; confirma itens, medidas, disponibilidade e pagamento antes de finalizar. O agente não confirma a venda nem reserva estoque.
+- **Alertas de pedido e atendente separados:** após conferir a compra, o responsável pode **Marcar pedido fechado**. O painel registra o nome de quem marcou e mantém o alerta, sem enviar confirmação automática, cobrar ou baixar estoque. Se o cliente também pedir atendente, os dois avisos aparecem. **Reativar agente** resolve a pendência e libera o chat para novas mensagens; o estado do último pedido continua registrado.
 - **Após 5 minutos sem resposta a uma cotação enviada**, oferece uma vez: **Quer fechar o pedido?**, **Adicionar mais itens** e **Encerrar conversa**. Só cotações com opções reais agendam acompanhamento. Resposta do cliente, pesquisa explícita, pedido para separar, atendimento manual, agente desligado, reinício ou reconexão impedem o envio. Há no máximo uma tentativa por chat a cada 24 horas, sem repetir para quem continua em silêncio ou tentar novamente após falha. O dono pode alterar ou desativar o prazo nas Configurações. Por QR, o cliente responde **1, 2 ou 3** ou escreve a opção; no simulador, pode clicar. Adicionar itens inicia a consulta do próximo produto, preservando o histórico; encerrar para o atendimento até uma nova mensagem do cliente.
 - Cotação com até cinco opções reais, priorizando marcas diferentes e preços menores, sem substituir outra referência para completar a lista. **MAIS** pagina sem repetir produtos já mostrados. Estoque insuficiente é informado; itens sem preço ficam sob consulta.
 - **Vários itens:** entende pedidos como `cotar corr B 72; correia A 89; correia 3VX 500` e responde em uma mensagem com até cinco opções por item, marcas e preços separados e numeração contínua. `MAIS` pagina as opções de cada item. A opção escolhida mantém a referência e a medida correspondentes. Se só um item precisar de uma medida, pergunta por ele e mantém os demais. Limite de dez referências por mensagem; acima disso pede divisão do pedido, sem omitir itens silenciosamente.
@@ -17,7 +19,7 @@ Painel do dono para uma loja de correias industriais, abertas e sincronizadoras.
 - Busca local com normalização de acentos, palavras usuais, plurais, pequenas variações de escrita, referência e números. Exemplos: `A42`, `A-42`, `A 42`; correias dentadas/sincronizadoras; filtros de marca e `até R$ 50`. Segue o contexto para marca ou orçamento. Não depende de uma API de IA paga, nem é um modelo de linguagem generalista.
 - Importação de CSV/Excel com prévia e confirmação antes da substituição. Sincronização manual ou agendada com Google Sheets. Arquivos inválidos preservam o catálogo existente. Produtos sem SKU recebem identificador estável; linhas idênticas sem SKU são agregadas apenas quando descrição, marca, medida, preço e unidade coincidem.
 - Cotações calculadas por unidade de venda: friso/canal × número pedido, sincronizadoras por mm × largura do corte, abertas por comprimento × largura em mm e peça × quantidade. Se faltar medida, o agente pergunta e mantém a referência na próxima mensagem. Conferência da largura/quantidade de cada lote impede unir retalhos para prometer uma correia maior. Peças prontas mantêm o preço fechado e as medidas fixas. O total de várias correias usa o valor de cada peça arredondado a centavos.
-- Quantidades fracionárias e unidades distintas preservadas: peça, metro, milímetro, friso etc. Preços vazios/zero são **Sob consulta**; nunca se tornam uma cotação de R$ 0. Não há reserva, baixa automática de estoque, pagamento ou conclusão de pedidos.
+- Quantidades fracionárias e unidades distintas preservadas: peça, metro, milímetro, friso etc. Aceita **MT, MTS, METRO e METROS**, inclusive junto do número, para comprimento. Códigos como **8M** continuam sendo o passo da sincronizadora. Preços vazios/zero são **Sob consulta**; nunca se tornam uma cotação de R$ 0. A marcação de pedido fechado é interna: não há reserva, baixa automática de estoque ou pagamento.
 - **Grupos, status, listas de transmissão, canais e mensagens do próprio número são ignorados.** Mensagens recebidas duplicadas não geram duas respostas.
 
 ## Instalação passo a passo
@@ -44,6 +46,12 @@ Ajustes opcionais estão em `.env.example`. Crie um `.env` local se necessário;
 No painel, abra **WhatsApp → Gerar QR Code**. No celular, abra **Aparelhos conectados → Conectar um aparelho** e leia o código. A aplicação não envia mensagens antes de conectar; o simulador nunca aciona números reais. A conta conectada recebe respostas nas novas mensagens de conversas individuais enquanto o servidor estiver funcionando.
 
 A sessão fica em `data/whatsapp`. Para reconectar automaticamente após reiniciar, defina `WHATSAPP_AUTO_CONNECT=true`. Se o aparelho revogar ou expirar a sessão, leia um novo QR. Uma sessão deve ser usada por uma única instância do servidor.
+
+### Acesso da equipe em vários computadores
+
+O dono conecta o número da loja uma vez e cadastra as pessoas em **Equipe → Novo atendente**. Cada pessoa abre **a mesma URL do painel** e entra com seu próprio e-mail e senha; não precisa conectar outro WhatsApp. Os nomes usados na digitação e na assinatura vêm da conta autenticada.
+
+Mantenha **uma instalação central**, com o mesmo banco e sessão. Instalar uma cópia do ZIP em cada computador cria instalações separadas, sem compartilhar chats. Na rede local, os colegas acessam o endereço do computador servidor, por exemplo `http://192.168.1.50:3000` (substitua pelo IP real e libere a porta na rede local). `localhost` em outro computador aponta para ele próprio. Para acesso pela internet, use uma URL HTTPS e configure `APP_URL` com ela.
 
 A integração usa `whatsapp-web.js`, **não oficial** e dependente de compatibilidade com o WhatsApp Web. Ela pode exigir novo pareamento quando o WhatsApp mudar. **Botões nativos de resposta não são suportados de forma confiável por QR.** Nesta implementação, o cliente digita **MAIS** ou **ATENDENTE**. No simulador há botões clicáveis equivalentes. Botões nativos no aplicativo exigiriam uma integração separada com a API oficial da Meta; ela não está implementada.
 
@@ -84,6 +92,7 @@ A importação/sincronização substitui o catálogo inteiro, não soma ao estoq
 - **5V2240, 4 canais**: mantém `5V` como perfil e calcula por 4 canais. Uma peça pronta com 6 canais fixos não é oferecida como peça de 4 canais.
 - **1304 8M, largura de 20 mm**: uma linha por mm é multiplicada por 20. Uma linha por peça pronta usa seu preço fechado e exige a largura correspondente.
 - **Aberta AT10, 2 metros × 25 mm**: se uma faixa inteira de 50 mm custar R$ 100 por metro, o corte custa `(100 ÷ 50) × 2 × 25 = R$ 100`. Esse valor é apenas um exemplo de cálculo, não um catálogo fornecido com o código.
+- **AT10 aberta 2 MT 25mm**, **AT10 2MTS x25mm** e **AT10 2 METROS 25mm**: todas pedem o mesmo corte de 2 metros × 25 mm. Se faltar a largura, o agente pergunta antes de calcular.
 - **AT10 33000**: interpreta 33000 mm como **33 metros de correia aberta** e pergunta a largura se faltar. Também aceita `AT10 33.000`, `AT10 33000 x 25mm` e `AT10 33m 25mm`. A conversão abreviada é limitada aos perfis lineares AT/T: comprimentos sem unidade a partir de 10000 mm, ou a partir de 1000 mm quando explicitamente abertos/com unidade mm. Códigos comuns de fechadas e larguras como `AT10 50mm` não viram comprimentos. Se o cliente disser `fechada`, essa conversão não é aplicada.
 
 O agente pergunta medidas faltantes e mantém a referência no contexto. Sincronizadoras por mm usam a largura do corte. Para abertas, comprimento é convertido para metros e largura para mm. O padrão `per_meter_full_width` considera o preço por metro da faixa inteira cadastrada; outra base pode ser selecionada nas Configurações. A cotação mostra a fórmula e o valor por correia, sem reservar ou baixar estoque. Cortes e disponibilidade são confirmados pelo atendente.
@@ -95,11 +104,14 @@ npm test
 npm run test:intents
 npm run test:followups
 npm run test:conversations
+npm run test:team
 npm run build
 npm run test:ui
 ```
 
 Os testes de navegador usam o Chromium local (`CHROME_PATH` pode sobrescrever) e um servidor/banco temporário isolado na porta 3101. Cobrem cadastro, cinco opções, paginação, alerta de atendente, resposta manual, reativação, importação confirmada e layout móvel. Não dependem de um número de WhatsApp nem enviam mensagens a clientes. A geração de um QR real foi validada separadamente; pareamento e entrega a um contato real dependem da leitura pelo dono e não foram feitos automaticamente.
+
+Na versão **1.4.0**, passaram **500 testes automatizados**, **7 testes de navegador** e o build de produção. O [relatório de equipe e unidades](docs/TESTES_EQUIPE_E_UNIDADES.md) descreve os testes de acessos separados, respostas assinadas, responsabilidade do chat, digitação entre dois navegadores, alertas de pedido, migração e abreviações de metros.
 
 A bateria de intenções exercita **180 mensagens diferentes** pelo fluxo completo do agente, com expectativas escritas nos testes. Inclui cotação, compra, negação, condição, abreviações, erros de escrita e respostas ambíguas. Veja o [relatório dos testes de intenção](docs/TESTES_INTENCOES.md). Esses resultados cobrem os casos do corpus; a interpretação usa regras locais e não garante entendimento de qualquer frase possível.
 

@@ -15,7 +15,7 @@ export function billingUnit(unit){
  const value=normalize(unit);
  if(/friso|canal|^fri$/.test(value))return 'ribs';
  if(/milimetro|^mm$/.test(value))return 'mm';
- if(/metro|^m$/.test(value))return 'meter';
+ if(/metro|^(?:m|mt|mts)(?:$|[ (])/.test(value))return 'meter';
  if(/peca|unidade|^pc$|^un$/.test(value))return 'piece';
  return 'other';
 }
@@ -23,7 +23,7 @@ export function billingUnit(unit){
 // Explicit purchase dimensions are kept apart from profile, pitch and length codes.
 // A 5PJ350 belt has five ribs. The 5 in 5V2240 is part of the profile.
 export function parseBeltRequest(query){
- let reference=normalize(query);
+ let reference=normalize(query).replace(/\b(\d+(?:[.,]\d+)?)\s*(?:mts?|mtros?)\.?(?=\s|$|[x×,;!?])/g,'$1 metros');
  const request={reference,ribs:null,mm:null,meters:null,pieces:1,hasPieces:false,budget:null,ribWord:'friso',error:null};
  if(/(?:^|\s)-\d+(?:[.,]\d+)?\s*(?:frisos?|canais|canal|mm|milimetros?|metros?|correias?|pecas?)\b/.test(reference))request.error='Informe apenas medidas e quantidades positivas.';
  const put=(key,value)=>{

@@ -21,6 +21,7 @@ A primeira execução baixa as dependências e pode demorar alguns minutos. Agua
 8. Abra **Estoque → Importar uma planilha** e selecione seu próprio arquivo Excel/CSV de estoque. Confira a prévia e confirme a substituição. Para Google Sheets, cole o link da sua planilha e sincronize. O ZIP do GitHub contém apenas o código; estoque e dados de acesso são configurados nesta etapa.
 9. Abra **WhatsApp → Gerar QR Code**. No celular: **WhatsApp → Aparelhos conectados → Conectar um aparelho**. Leia o código.
 10. Use **Testar agente** para conferir as cotações no simulador antes de atender clientes.
+11. Em **Equipe → Novo atendente**, cadastre nome, e-mail e senha de cada pessoa. Cada atendente abre a mesma instalação no navegador com seu próprio login. O QR conecta o número da loja; não é necessário conectar um número por usuário.
 
 O computador e o Docker precisam permanecer ligados para o agente responder. O histórico, a conta e a sessão ficam no volume persistente `cota-data`; esse volume é criado na primeira execução. A instalação nova não contém contas, senhas, histórico ou sessão de WhatsApp de outro ambiente.
 
@@ -29,6 +30,18 @@ O computador e o Docker precisam permanecer ligados para o agente responder. O h
 Em macOS, os mesmos passos de Docker Desktop e `docker compose` se aplicam. Em Linux, instale Docker Engine e o plugin Docker Compose conforme a documentação oficial https://docs.docker.com/engine/install/ e execute os comandos na pasta do projeto.
 
 Para um servidor/VPS acessível pela internet, configure domínio, HTTPS e `APP_URL` com a URL HTTPS exata antes de expor o painel. Crie a conta de dono em um acesso restrito inicial. Esta etapa depende do domínio e do servidor escolhidos; não basta publicar a configuração do ambiente de desenvolvimento para hospedar o painel.
+
+## Usar em vários computadores
+
+Instale o agente **uma vez**, no computador ou servidor que ficará ligado. Todos os usuários acessam esse mesmo servidor; não instale uma cópia independente para cada atendente.
+
+Na rede da loja, use o IP do servidor, por exemplo `http://192.168.1.50:3000`, substituindo pelo endereço real. No Windows, `ipconfig` mostra o endereço IPv4. Libere a porta 3000 no firewall para a rede local. Nos computadores dos atendentes, `localhost:3000` não acessa o servidor da loja. Se utilizar `APP_URL`, ela deve corresponder à URL que todos usam. Para acesso externo, configure domínio e HTTPS.
+
+O dono cadastra as contas em **Equipe**, com senha de pelo menos dez caracteres, e informa o acesso a cada pessoa. A aplicação não envia senhas por e-mail. Atendentes veem as mesmas conversas, assumem um chat antes de responder e podem trocar a própria senha em **Configurações**. O dono mantém o controle de estoque, conexão QR, configurações e acessos.
+
+Ao digitar no painel, o nome aparece para os colegas. O cliente recebe a resposta assinada, por exemplo **Carla Lima: Olá, vou te atender.** O padrão é assinar; o dono pode alterar em **Configurações → Assinar mensagens no WhatsApp com o nome do atendente**. Cada chat tem um responsável por vez; o dono pode transferi-lo para si usando **Assumir atendimento**.
+
+**Pode separar**, **quero fechar** e **vou comprar** criam o alerta **Quer fechar pedido** e pausam a conversa. Depois de conferir os detalhes com o cliente, o responsável usa **Marcar pedido fechado**, que registra seu nome no painel. Isso não envia outra mensagem automática, não cobra e não baixa o estoque. Pedidos de atendente mantêm seu próprio aviso. Para voltar ao atendimento automático, use **Reativar agente** somente naquele chat.
 
 ## Comandos do dia a dia
 
@@ -78,6 +91,8 @@ A versão 1.1.0 também distingue cotação de intenção de compra. Ao reconhec
 A versão 1.2.0 entende `AT10 33000` como **33 metros de aberta**, perguntando a largura quando faltar. Em **Configurações → Acompanhamento após cotação**, o padrão é **5 minutos sem resposta**, com as três opções fechar pedido, adicionar itens e encerrar. Por QR, o cliente responde **1, 2 ou 3**. O menu tem no máximo uma tentativa por conversa em 24 horas e não fica se repetindo. Resposta do cliente, pedido para separar, atendimento manual, desligamento, reinício ou reconexão cancelam o agendamento anterior. A instalação atualizada não envia lembretes de cotações antigas: é necessária uma nova cotação após mensagem do cliente.
 
 A versão 1.3.0 adiciona a apresentação fixa do **ROBINHO** uma vez a cada 24 horas, somente ao responder a uma mensagem recebida válida. Aceita `oi vim pelo site`, pedidos com várias referências e `4 PK 650` como quatro frisos de PK650, incluindo peças prontas e cortes quando cadastrados. A cotação lista até cinco opções por item; itens sem saldo ou preço não recebem valores inventados. A migração preserva o histórico e o horário da apresentação entre reinícios. A primeira apresentação após atualizar depende de uma nova mensagem do cliente; não há envio retroativo.
+
+A versão **1.4.0** adiciona contas da equipe, digitação identificada, assinaturas nas respostas, responsável por chat e alertas separados de compra, pedido fechado e solicitação de atendente. Aceita **MT, MTS, METRO e METROS** para comprimento. A conta e senha atuais do dono continuam válidas, e os alertas existentes de compra/atendente são migrados. A criação de usuários e a marcação interna de pedido fechado não enviam mensagens a clientes. Depois de atualizar, entre com a conta do dono e cadastre os demais acessos em **Equipe**.
 
 ## Cotações configuradas
 

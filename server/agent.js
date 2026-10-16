@@ -135,7 +135,12 @@ export class Agent {
    const already=!!chat.needs_human,purchase=type==='purchase',selected=quotedOptions[analysis.selectionIndex];
    const samePurchase=purchase&&!selected&&chat.handoff_reason==='purchase'&&!/\d/.test(parseBeltRequest(quoteSearchText(body)).reference);
    const summary=purchase?(selected?`Opção ${analysis.selectionIndex+1}: ${selected.brand} · ${selected.description}\nCotação de referência: ${selected.line}\nSolicitação do cliente: ${body.trim()}`:samePurchase?chat.purchase_summary:`Mensagem do cliente: ${body.trim()}${chat.query?`\nÚltima cotação (referência): ${chat.query}`:''}`):chat.purchase_summary;
-   this.store.run("UPDATE chats SET mode='manual',pause_until=NULL,needs_human=1,handoff_reason=?,purchase_summary=?,pending_selection=NULL WHERE id=?",purchase?'purchase':chat.handoff_reason||'human',summary||null,chat.id);this.store.changed();
+   const reason=already&&chat.order_state==='confirmed'?'order_closed':purchase?'purchase':chat.handoff_reason||'human';
+   this.store.run("UPDATE chats SET mode='manual',pause_until=NULL,needs_human=1,handoff_reason=?,purchase_summary=?,pending_selection=NULL WHERE id=?",reason,summary||null,chat.id);
+   if(purchase){
+    this.store.run("UPDATE chats SET purchase_requested=1,order_state=CASE WHEN order_state='confirmed' AND needs_human=1 AND ? THEN order_state ELSE 'interest' END WHERE id=?",already?1:0,chat.id);
+   }else this.store.run('UPDATE chats SET human_requested=1 WHERE id=?',chat.id);
+   this.store.changed();
    if(!already&&chat.mode!=='manual'&&this.store.settings().agentEnabled){
     const reply=purchase?`Entendi que você quer fechar uma compra.${selected?`\nInteresse na opção ${analysis.selectionIndex+1}: *${selected.brand}* · ${selected.description}.`:''}\nAvisei nossa equipe para confirmar os itens, as medidas, a disponibilidade e as condições de pagamento com você. O pedido ainda não está confirmado e o estoque não foi reservado.`:'Claro! Avisei um atendente. A partir de agora, esta conversa fica com a nossa equipe. Assim que possível, alguém responde por aqui.';
     await respond(reply,[]);
@@ -176,8 +181,8 @@ export class Agent {
   if(response.needsHuman)this.store.run("UPDATE chats SET mode='manual',pause_until=NULL,needs_human=1 WHERE id=?",chat.id);
   if(this.store.chat(chat.id).mode==='manual'&&!response.needsHuman&&!response?.body?.includes('estoque está sendo atualizado'))return{chatId:chat.id,paused:true};const reply=await respond(response.body,response.actions);if(reply.status==='sent'&&response.ids?.length&&!response.awaiting&&analysis.allowFollowup)this.followups.schedule(chat.id,reply.id);return{chatId:chat.id,intent:type};
  }
- async reply(chat,body,actions=[],direction='bot'){
-  const message=this.store.addMessage({chatId:chat.id,direction,body,actions,status:'pending'});
-  try{const providerId=chat.channel==='simulator'?null:await this.send(chat,body,actions);this.store.run("UPDATE messages SET status='sent',provider_id=? WHERE id=?",providerId||null,message.id);}catch(e){this.store.run("UPDATE messages SET status='failed',error=? WHERE id=?",String(e.message).slice(0,400),message.id);this.store.event('send_error','Uma mensagem não foi enviada. Verifique a conexão e o chat.');}this.store.changed();return this.store.get('SELECT * FROM messages WHERE id=?',message.id);
+ async reply(chat,body,actions=[],direction='bot',{author=null,transportBody=body}={}){
+  const message=this.store.addMessage({chatId:chat.id,direction,body,actions,status:'pending',author,deliveryBody:direction==='owner'?transportBody:null});
+  try{const providerId=chat.channel==='simulator'?null:await this.send(chat,transportBody,actions);this.store.run("UPDATE messages SET status='sent',provider_id=? WHERE id=?",providerId||null,message.id);}catch(e){this.store.run("UPDATE messages SET status='failed',error=? WHERE id=?",String(e.message).slice(0,400),message.id);this.store.event('send_error','Uma mensagem não foi enviada. Verifique a conexão e o chat.');}this.store.changed();return this.store.get('SELECT * FROM messages WHERE id=?',message.id);
  }
 }
