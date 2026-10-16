@@ -1,6 +1,6 @@
-# Atualizar para a versão 1.15.1 no Docker
+# Atualizar para a versão 1.15.2 no Docker
 
-A versão 1.15.1 corrige a indicação de falha quando o WhatsApp já aceitou o envio de um texto ou foto. Recupera a confirmação pelo identificador da própria tentativa, sem repetir o envio, e separa falhas de leitura do resultado do envio. Veja [CONFIRMACAO_ENVIO.md](docs/CONFIRMACAO_ENVIO.md).
+A versão 1.15.2 inclui recuperação do erro `profile_busy` e oculta conversas, grupos, contatos e histórico enquanto o WhatsApp não estiver conectado. Os registros continuam salvos. Se seu QR está bloqueado, siga primeiro [PERFIL_OCUPADO_E_CONEXAO.md](docs/PERFIL_OCUPADO_E_CONEXAO.md): a manutenção precisa do serviço parado e da imagem nova.
 
 Use a instalação que já está funcionando. O ZIP contém o código; estoque, usuários, conversas e sessão do WhatsApp permanecem no volume existente.
 
@@ -9,10 +9,10 @@ Use a instalação que já está funcionando. O ZIP contém o código; estoque, 
 3. Pare o serviço antes de substituir os arquivos:
 
 ```powershell
-docker compose stop cota
+docker compose stop -t 30 cota
 ```
 
-4. Copie o conteúdo da pasta extraída (`agent-<código>` no download do GitHub ou `cota-whatsapp-1.15.1` no pacote local) para a pasta da instalação atual, substituindo os arquivos do código. O `compose.yaml`, o `Dockerfile`, `server` e `src` devem ficar diretamente na pasta atual, sem criar outra pasta dentro dela. Preserve seu `.env`, dados locais e eventuais ajustes próprios de porta, domínio ou volumes no `compose.yaml`.
+4. Copie o conteúdo da pasta extraída (`agent-<código>` no download do GitHub ou `cota-whatsapp-1.15.2` no pacote local) para a pasta da instalação atual, substituindo os arquivos do código. O `compose.yaml`, o `Dockerfile`, `server` e `src` devem ficar diretamente na pasta atual, sem criar outra pasta dentro dela. Preserve seu `.env`, dados locais e eventuais ajustes próprios de porta, domínio ou volumes no `compose.yaml`.
 5. Na mesma pasta e usando o mesmo projeto Compose da instalação anterior, execute:
 
 ```powershell
@@ -34,9 +34,11 @@ docker compose logs --tail=100 cota
 docker compose exec cota node -p "require('./package.json').version"
 ```
 
-Deve mostrar `1.15.1`.
+Deve mostrar `1.15.2`.
 
 8. Abra o endereço que você já usa para acessar o painel e pressione **Ctrl+F5**. Na instalação local padrão, o endereço digitado no navegador é `localhost:3000`. Assuma um chat de teste com outro número e envie uma mensagem manual. Confira a mensagem no WhatsApp e o check no Cota. Se houver perda de confirmação sem prova suficiente, o painel mostrará **Envio não confirmado**, com orientação para conferir no WhatsApp antes de reenviar. Não há reenvio automático. As marcações antigas já gravadas não são alteradas sem confirmação.
+
+Com o WhatsApp desconectado, suas conversas, contatos e histórico ficam ocultos, com os dados preservados no volume. Ao reconectar, voltam a aparecer conforme o cargo e o responsável. As simulações seguem disponíveis.
 
 Com o WhatsApp **Conectado**, as listas de conversas, grupos e contatos salvos disponíveis são sincronizadas automaticamente. Um Admin pode abrir **WhatsApp** ou **Contatos** e clicar em **Sincronizar WhatsApp**. Conversas livres já lidas aparecem em **Histórico**; **Não lidas** contém somente mensagens novas. Admin também vê **Todos os atendimentos**. Agora a importação percorre as mensagens disponíveis dos últimos 30 dias das conversas privadas, sem limite fixo de 50. Em **Contatos**, clicar no nome abre a consulta sem assumir o chat ou enviar mensagens. Não é necessário apagar a sessão para preencher as listas. Veja [SINCRONIZACAO_WHATSAPP.md](docs/SINCRONIZACAO_WHATSAPP.md). Se a carga ficar incompleta, envie o detalhe de `docker compose logs --tail=100 cota`, nas linhas `[WhatsApp sync]`.
 
@@ -52,4 +54,4 @@ Nesta versão, o atendimento automático envia um único aviso e encerra após c
 
 Não execute `docker compose down -v` nem exclua o volume `cota-data`. O nome real do volume costuma incluir o nome do projeto Compose. Mantenha a mesma instalação/projeto para preservar estoque, acessos, histórico e sessão. Caso a sessão de WhatsApp tenha expirado, gere um novo QR no painel.
 
-O pacote foi verificado com 3.201 testes automatizados, 36 testes de navegador e build de produção. A imagem Docker precisa ser construída no seu host pelo comando acima; não foi executado um build Docker neste ambiente.
+O pacote foi verificado com 3.255 testes automatizados, 38 testes de navegador e build de produção. A imagem Docker precisa ser construída no seu host pelo comando acima; não foi executado um build Docker neste ambiente.

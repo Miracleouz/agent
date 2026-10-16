@@ -35,8 +35,9 @@ export function createApp({store,whatsapp,production=false,appUrl=process.env.AP
  accounts.protectedRoutes(app,clearPresence);
  app.get('/api/bootstrap',(req,res)=>{
   const settings=store.settings(),connection=whatsapp.snapshot(),admin=req.user.role==='admin';
-  const chats=store.chats().filter(chat=>admin||!chat.assigned_user_id||chat.assigned_user_id===req.user.id),visibleIds=new Set(chats.map(chat=>chat.id));
-  res.json({currentUser:req.user,settings:admin?settings:{businessName:settings.businessName,agentEnabled:settings.agentEnabled,pauseMinutes:settings.pauseMinutes},stats:store.stats({userId:admin?null:req.user.id}),chats,groups:store.groupList(),typing:presence().filter(item=>visibleIds.has(item.chatId)),team:admin?store.all('SELECT id,name,role FROM users WHERE active=1 ORDER BY name'):[],connection:admin?connection:{status:connection.status,number:connection.number},imports:admin?store.all('SELECT * FROM imports ORDER BY created DESC LIMIT 8'):[],events:admin?store.all('SELECT * FROM events ORDER BY created DESC LIMIT 12'):[]});
+  const connected=connection.status==='ready',chats=store.chats().filter(chat=>(connected||chat.channel==='simulator')&&(admin||!chat.assigned_user_id||chat.assigned_user_id===req.user.id)),visibleIds=new Set(chats.map(chat=>chat.id));
+  const stats=store.stats({userId:admin?null:req.user.id});if(!connected)Object.assign(stats,{conversations:0,replies:0,waiting:chats.filter(chat=>chat.needs_human).length});
+  res.json({currentUser:req.user,settings:admin?settings:{businessName:settings.businessName,agentEnabled:settings.agentEnabled,pauseMinutes:settings.pauseMinutes},stats,chats,groups:connected?store.groupList():[],typing:presence().filter(item=>visibleIds.has(item.chatId)),team:admin?store.all('SELECT id,name,role FROM users WHERE active=1 ORDER BY name'):[],connection:admin?connection:{status:connection.status,number:connection.number},imports:admin?store.all('SELECT * FROM imports ORDER BY created DESC LIMIT 8'):[],events:admin?store.all('SELECT * FROM events ORDER BY created DESC LIMIT 12'):[]});
  });
  app.get('/api/events',(req,res)=>{
   res.set({'Content-Type':'text/event-stream','Connection':'keep-alive','X-Accel-Buffering':'no'});res.flushHeaders();res.write('event: ready\ndata: {}\n\n');
@@ -48,13 +49,14 @@ export function createApp({store,whatsapp,production=false,appUrl=process.env.AP
   const input=z.object({businessName:z.string().trim().min(2).max(80).optional(),pauseMinutes:z.number().int().min(1).max(1440).optional(),agentEnabled:z.boolean().optional(),signHumanMessages:z.boolean().optional(),followupMinutes:z.literal(5).optional(),syncMinutes:z.union([z.literal(0),z.number().int().min(5).max(1440)]).optional(),sheetUrl:z.string().max(500).optional(),priceMode:z.enum(['unconfirmed','sale','cost']).optional(),markupPercent:z.number().min(0).max(1000).optional(),mmDimension:z.literal('width').optional(),openBeltPriceBasis:z.enum(['unconfirmed','per_meter_mm','per_meter_full_width']).optional()}).strict().parse(req.body);
   if(input.sheetUrl)sheetExport(input.sheetUrl);res.json(store.setSettings(input));
  });
- function getChat(id){const chat=store.chat(id);if(!chat)throw fail('Conversa não encontrada.',404);return chat;}
+ function connectedWhatsApp(){if(whatsapp.snapshot().status!=='ready')throw fail('Conecte o WhatsApp para acessar conversas, histórico e contatos.',409);}
+ function getChat(id){const chat=store.chat(id);if(!chat)throw fail('Conversa não encontrada.',404);if(chat.channel!=='simulator')connectedWhatsApp();return chat;}
  function visibleChat(req){const chat=getChat(req.params.id);if(req.user.role!=='admin'&&chat.assigned_user_id&&chat.assigned_user_id!==req.user.id)throw fail('Esta conversa está com outro usuário.',403);return chat;}
  app.get('/api/chats/:id/messages',(req,res)=>{const chat=visibleChat(req);whatsapp.loadHistory?.(chat).catch(()=>{});whatsapp.avatars?.refresh([chat.phone]).catch(()=>{});res.json(store.messages(req.params.id));});
  app.get('/api/chats/:id/avatar',(req,res)=>{const chat=visibleChat(req);sendAvatar(store,res,chat.phone);});
  app.post('/api/chats/:id/history',(req,res)=>{const chat=visibleChat(req);z.object({}).strict().parse(req.body||{});whatsapp.loadHistory?.(chat,{force:true}).catch(()=>{});res.status(202).json({ok:true});});
  app.post('/api/chats/:id/read',async(req,res)=>{const chat=visibleChat(req),{force=false}=z.object({force:z.boolean().optional()}).strict().parse(req.body||{});if(chat.assigned_user_id===req.user.id){store.run('UPDATE chats SET unread=0 WHERE id=?',chat.id);store.changed();}const sync=await whatsapp.markRead?.(chat,{force});res.json({ok:true,sync:sync||null});});
- function getGroup(id){const group=store.get('SELECT id FROM whatsapp_groups WHERE id=?',id);if(!group)throw fail('Grupo não encontrado.',404);return group;}
+ function getGroup(id){connectedWhatsApp();const group=store.get('SELECT id FROM whatsapp_groups WHERE id=?',id);if(!group)throw fail('Grupo não encontrado.',404);return group;}
  app.get('/api/groups/:id/messages',(req,res)=>{getGroup(req.params.id);whatsapp.avatars?.refresh([req.params.id]).catch(()=>{});res.json(store.groupMessages(req.params.id));});
  app.get('/api/groups/:id/avatar',(req,res)=>{getGroup(req.params.id);sendAvatar(store,res,req.params.id);});
  app.post('/api/groups/:id/read',async(req,res)=>{getGroup(req.params.id);const{force=false}=z.object({force:z.boolean().optional()}).strict().parse(req.body||{});store.run('UPDATE whatsapp_groups SET unread=0 WHERE id=?',req.params.id);store.changed();const sync=await whatsapp.markRead?.({id:req.params.id,phone:req.params.id,channel:'group'},{force});res.json({ok:true,sync:sync||null});});

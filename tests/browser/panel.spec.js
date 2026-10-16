@@ -138,7 +138,7 @@ test('Admin registers five users in a batch, changes roles and transfers chats b
   await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBeTruthy();
  }finally{for(const context of contexts)await context.close();}
 });
-test('released read chats are available in history without fake unreads and groups remain read only',async({page,browser,baseURL})=>{
+test('released test chats remain in history while disconnected WhatsApp groups stay hidden',async({page,browser,baseURL})=>{
  await page.goto('/');await page.getByLabel('E-mail',{exact:true}).fill('marina@example.test');await page.getByLabel('Senha',{exact:true}).fill('owner-pass-test-123');await page.getByRole('button',{name:'Entrar no painel',exact:true}).click();
  await page.getByRole('tab',{name:/Todos os atendimentos/}).click();await page.locator('.chat-item').filter({hasText:'Cliente de teste'}).first().click();await page.getByRole('button',{name:'Liberar conversa',exact:true}).click();
  const contexts=[],errors=[];
@@ -153,7 +153,7 @@ test('released read chats are available in history without fake unreads and grou
   await one.screenshot({path:'test-results/personal-inbox.png',fullPage:true});
   await one.getByRole('button',{name:'Liberar conversa',exact:true}).click();await expect(one.locator('.chat-item')).toHaveCount(0);await expect(one.getByLabel('Mensagem manual')).toHaveCount(0);await expect(two.locator('.chat-item')).toHaveCount(1);
   await two.locator('.chat-item').first().click();await expect(two.getByRole('tab',{name:/Conversas · Comercial Um/})).toHaveAttribute('aria-selected','true');await expect(two.locator('.team-chat-controls')).toContainText('Comercial Um');
-  await one.getByRole('tab',{name:/Não lidas/}).click();await expect(one.locator('.chat-item')).toHaveCount(0);await one.getByRole('tab',{name:/Grupos/}).click();await expect(one.locator('.chat-item').filter({hasText:'Grupo simulado de teste'})).toBeVisible();await one.locator('.chat-item').first().click();await expect(one.locator('.message-body')).toContainText('Mensagem de grupo para consulta');await expect(one.getByText('Grupo em modo de consulta',{exact:true})).toBeVisible();await expect(one.getByLabel('Mensagem manual')).toHaveCount(0);await expect(one.getByRole('button',{name:'Liberar conversa',exact:true})).toHaveCount(0);
+  await one.getByRole('tab',{name:/Não lidas/}).click();await expect(one.locator('.chat-item')).toHaveCount(0);await one.getByRole('tab',{name:/Grupos/}).click();await expect(one.locator('.chat-item')).toHaveCount(0);await expect(one.getByText(/Conecte o WhatsApp para ver conversas, grupos e histórico/)).toBeVisible();await expect(one.getByLabel('Mensagem manual')).toHaveCount(0);await expect(one.getByRole('button',{name:'Liberar conversa',exact:true})).toHaveCount(0);
   await one.screenshot({path:'test-results/groups-readonly.png',fullPage:true});
   await two.setViewportSize({width:390,height:844});expect(await two.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBeTruthy();expect(errors).toEqual([]);
  }finally{for(const context of contexts)await context.close();}

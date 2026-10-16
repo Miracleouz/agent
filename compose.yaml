@@ -2,6 +2,7 @@ services:
   cota:
     build: .
     init: true
+    stop_grace_period: 30s
     restart: unless-stopped
     ports:
       - "3000:3000"

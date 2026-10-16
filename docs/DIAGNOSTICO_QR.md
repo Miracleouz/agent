@@ -1,6 +1,8 @@
-# Quando o QR Code não aparece — versão 1.11.1
+# Quando o QR Code não aparece
 
 O painel responder na porta 3000 confirma que o servidor está acessível. O QR depende de outro componente: o Chromium precisa iniciar, acessar o WhatsApp Web e carregar a página. A mensagem genérica das versões anteriores não permite concluir que houve falha de internet.
+
+Se o painel mostra `profile_busy` e o log cita outro computador/contêiner, a versão **1.15.2** inclui um procedimento de recuperação que preserva a sessão e o banco. Veja [PERFIL_OCUPADO_E_CONEXAO.md](PERFIL_OCUPADO_E_CONEXAO.md). A manutenção exige que todas as instâncias que usam a sessão estejam paradas.
 
 ## Diagnóstico no Docker do computador
 
@@ -44,7 +46,7 @@ Se o diagnóstico temporário funcionar e o painel continuar falhando, confira o
 
 Se houver apenas timeout e recursos/rede estiverem adequados, `WHATSAPP_AUTH_TIMEOUT_MS` permite ajustar a espera do carregamento da autenticação entre 30000 e 300000 ms. O Compose fornecido encaminha essa variável do `.env`. Valores inválidos usam 90000 ms. Isso não corrige falta de memória, DNS, certificados, permissões ou perfil ocupado.
 
-## Verificação desta atualização
+## Verificação da versão 1.11.1
 
 Em 16/10/2026, foram aprovados **2.186 testes de servidor**, incluindo **48 testes novos** de diagnóstico, privacidade dos erros, limites de espera, eventos atrasados, reconexões concorrentes e cancelamento durante limpeza do navegador. Passaram também **17 testes de navegador**, incluindo a exibição de um erro de perfil ocupado e uma nova tentativa que gera QR sem logout ou envio. A regressão mantém as conversas e regras de não iniciar contato automaticamente. O build de produção passou.
 

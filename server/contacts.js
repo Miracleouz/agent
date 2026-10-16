@@ -12,6 +12,11 @@ export function normalizeContactPhone(value){
 const fields={name:z.string().trim().min(2).max(100),phone:z.string().min(1).max(40),company:z.string().trim().max(120)};
 const profile=z.object({...fields,company:fields.company.default('')}).strict(),patchProfile=z.object(fields).partial().strict();
 export function contactRoutes({app,store,accounts,agent,whatsapp}){
+ app.use('/api/contacts',(req,res,next)=>{
+  if(whatsapp.snapshot().status==='ready')return next();
+  if(req.method==='GET'&&req.path==='/')return res.json({items:[],total:0,page:0,limit:50});
+  throw fail('Conecte o WhatsApp para acessar contatos e histórico.',409);
+ });
  const contact=id=>{const value=store.get('SELECT * FROM contacts WHERE id=?',id);if(!value)throw fail('Contato não encontrado.',404);return value;};
  app.get('/api/contacts',(req,res)=>{
   const search=String(req.query.search||'').trim().slice(0,100),digits=search.replace(/\D/g,''),page=Math.max(0,Math.min(5000,Math.trunc(Number(req.query.page))||0)),limit=50,query=`%${search}%`,numeric=digits?`%${digits}%`:query;
