@@ -2,6 +2,9 @@ import { parse } from 'csv-parse/sync';
 import ExcelJS from 'exceljs';
 import { randomUUID,createHash } from 'node:crypto';
 export const normalize=value=>String(value??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+const brandPattern=brand=>new RegExp('(^|[^a-z0-9])'+normalize(brand).split(/\s+/).map(part=>part.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('\\s+')+'(?=$|[^a-z0-9])','g');
+export const mentionsBrand=(text,brand)=>!!normalize(brand)&&brandPattern(brand).test(normalize(text));
+export const removeBrand=(text,brand)=>normalize(brand)?normalize(text).replace(brandPattern(brand),'$1 '):normalize(text);
 const aliases={sku:['sku','codigo','cod','referencia','ref','id'],name:['produto','nome','descricao','descricao padronizada','item','product','product name','modelo'],brand:['marca','fabricante','brand'],variant:['medida','variacao','variante','tamanho','especificacao','dimensao','size'],price:['preco','valor','preco venda','preco de venda','valor venda','venda','price','valor unitario','preco unitario','valor unitario original r'],quantity:['quantidade','qtd','qtde','estoque','saldo','disponivel','stock','quantidade total'],unit:['unidade','unidade de medida','un','unit']};
 const header=s=>normalize(s).replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
 export function number(value){if(typeof value==='number')return value;let s=String(value??'').replace(/R\$|\s/g,'');if(s.includes(','))s=s.replace(/\./g,'').replace(',','.');if(s.endsWith('.'))s+='0';return /^\d+(\.\d+)?$/.test(s)?Number(s):NaN;}

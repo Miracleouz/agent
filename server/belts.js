@@ -1,4 +1,4 @@
-import {normalize} from './catalog.js';
+import {normalize,mentionsBrand,removeBrand} from './catalog.js';
 
 const VALUE='(\\d+(?:[.,]\\d+)?)';
 const ribsPattern=new RegExp(`\\b${VALUE}\\s*(frisos?|canais|canal|ribs?)\\b`,'g');
@@ -170,13 +170,13 @@ export function formatBeltCalculation(product,request,quote,{mmDimension='width'
 export function mergeBeltRequest(previous,next,brands=[]){
  const prior=parseBeltRequest(previous),current=parseBeltRequest(next);
  let remaining=current.reference;
- for(const brand of brands)remaining=remaining.replaceAll(normalize(brand),' ');
+ for(const brand of brands)remaining=removeBrand(remaining,brand);
  const detailOnly=!/\d/.test(remaining)&&remaining.split(/[^a-z0-9]+/).every(t=>!t||['e','da','do','de','a','o','com','quero','sao','seriam','para','pra','por','favor','correia','correias','sim','na','verdade','em','vez','dessa','desta','agora'].includes(t));
- const changed=current.ribs!==null||current.mm!==null||current.meters!==null||current.hasPieces||current.budget!==null||brands.some(b=>normalize(next).includes(normalize(b)));
+ const changed=current.ribs!==null||current.mm!==null||current.meters!==null||current.hasPieces||current.budget!==null||brands.some(b=>mentionsBrand(next,b));
  if(!detailOnly||!changed)return next;
  let reference=prior.reference;
- const requestedBrands=brands.filter(b=>normalize(next).includes(normalize(b)));
- if(requestedBrands.length){for(const b of brands)reference=reference.replaceAll(normalize(b),' ');reference+=' '+requestedBrands.join(' ');}
+ const requestedBrands=brands.filter(b=>mentionsBrand(next,b));
+ if(requestedBrands.length){for(const b of brands)reference=removeBrand(reference,b);reference+=' '+requestedBrands.join(' ');}
  const pieces=current.hasPieces?current.pieces:prior.pieces;
  const ribs=current.ribs??prior.ribs,mm=current.mm??prior.mm,meters=current.meters??prior.meters,budget=current.budget??prior.budget;
  return `${reference} ${pieces} correias${ribs!==null?` ${ribs} ${current.ribWord==='canal'?'canais':'frisos'}`:''}${mm!==null?` ${mm} mm`:''}${meters!==null?` ${meters} metros`:''}${budget!==null?` ate ${budget}`:''}`.trim();

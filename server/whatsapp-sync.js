@@ -16,7 +16,7 @@ export class WhatsAppSync{
  run(){
   if(this.wa.status!=='ready'||!this.wa.client)return Promise.reject(Object.assign(new Error('Aguarde o WhatsApp ficar Conectado antes de sincronizar.'),{status:409}));
   if(this.promise)return this.promise;
-  const client=this.wa.client,generation=this.wa.generation,signal=this.controller.signal;this.histories.clear();this.cutoff=Date.now()-historyWindow;this.state={status:'loading',chats:0,groups:0,contacts:0,completedAt:null,error:null,historyDays,historiesDone:0,historiesTotal:0,stage:'lists'};this.store.changed();
+  const client=this.wa.client,generation=this.wa.generation,signal=this.controller.signal;this.readAnchor=this.store.get('SELECT COALESCE(MAX(rowid),0) seq FROM messages').seq;this.groupReadAnchor=this.store.get('SELECT COALESCE(MAX(rowid),0) seq FROM whatsapp_group_messages').seq;this.histories.clear();this.cutoff=Date.now()-historyWindow;this.state={status:'loading',chats:0,groups:0,contacts:0,completedAt:null,error:null,historyDays,historiesDone:0,historiesTotal:0,stage:'lists'};this.store.changed();
   const task=this.perform(client,generation,signal).catch(error=>{if(this.active(client,generation)&&!signal.aborted){this.report(error);this.state={...this.state,status:'error',error:'A sincronização falhou. Os dados já salvos foram preservados. Tente Sincronizar WhatsApp novamente.'};this.store.event('whatsapp_sync_error',this.state.error);}return this.snapshot();});this.promise=task;task.finally(()=>{if(this.promise===task)this.promise=null;}).catch(()=>{});return task;
  }
  async perform(client,generation,signal){
@@ -38,7 +38,7 @@ export class WhatsAppSync{
   }
   if(!checked())return this.snapshot();
   this.store.transaction(()=>{
-   for(const remote of chats){const id=idOf(remote);if(!remote.isGroup||!groupId(id))continue;this.store.upsertGroup(id,remote.name);this.state.groups++;}
+   for(const remote of chats){const id=idOf(remote);if(!remote.isGroup||!groupId(id))continue;this.store.upsertGroup(id,remote.name);if(remote.unreadCount===0)this.wa.readSync?.snapshotRead({id,phone:id,channel:'group'},this.groupReadAnchor);this.state.groups++;}
    for(const remote of privateChats){
     const id=idOf(remote),aliases=new Set(identities.get(id)||[id]);
     for(const alias of [...aliases])if(/@(?:c\.us|s\.whatsapp\.net)$/.test(alias)){const number=alias.split('@')[0];for(const domain of ['c.us','s.whatsapp.net'])aliases.add(number+'@'+domain);}
@@ -49,6 +49,7 @@ export class WhatsAppSync{
     if(!chat){const chatId=randomUUID(),phone=params.find(alias=>alias.endsWith('@c.us'))||id;this.store.run("INSERT INTO chats(id,phone,name,channel,provider,updated,last_inbound,unread) VALUES(?,?,?,'whatsapp','qr',?,0,0)",chatId,phone,name,stamp(remote.timestamp));chat=this.store.chat(chatId);}
     else if(chat.name===chat.phone||chat.name===chat.phone.split('@')[0])this.store.run('UPDATE chats SET name=? WHERE id=?',name,chat.id);
     for(const alias of aliases)this.store.run('INSERT OR IGNORE INTO whatsapp_chat_aliases VALUES(?,?)',alias,chat.id);
+    if(remote.unreadCount===0)this.wa.readSync?.snapshotRead(chat,this.readAnchor);
     this.remotes.set(chat.id,remote);this.state.chats++;if(remote.lastMessage)this.importMessage(chat,remote.lastMessage);
    }
    for(const person of people){

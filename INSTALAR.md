@@ -162,6 +162,8 @@ A versão **1.12.0** sincroniza listas de conversas, grupos e contatos salvos di
 
 A versão **1.13.0** busca o histórico disponível dos últimos 30 dias por paginação, sem limite fixo de 50 mensagens. **Histórico** e **Não lidas** ficam separados; liberar um chat lido não o marca como novo. Clique no nome em **Contatos** para consultar sem assumir o atendimento. Na primeira atualização, os contadores antigos de WhatsApp são zerados uma vez para remover a antiga marcação de fila; mensagens, responsáveis, estoque e alertas são preservados. Veja [HISTORICO_MENSAL_E_NAO_LIDAS.md](docs/HISTORICO_MENSAL_E_NAO_LIDAS.md).
 
+A versão **1.14.0** adiciona leitura sincronizada com o celular, confirmação real dos checks das respostas e visual MP Correias em desktop e celular. Abrir o chat, consultar o histórico por Contatos ou responder pelo painel/bot marca a conversa como lida no WhatsApp. Se falhar, **Sincronizar leitura** permite tentar a leitura novamente sem repetir mensagens. A consulta por contato continua sem assumir o atendimento. O monograma MP em texto é provisório até recebermos o logo oficial. Também amplia os nomes de sincronizadoras reconhecidos no estoque, incluindo SINCR, SINC e SINCRON. Consulte [LEITURA_E_PAINEL_MP.md](docs/LEITURA_E_PAINEL_MP.md).
+
 ## Cotações configuradas
 
 - **Abertas:** `(preço por metro da faixa inteira ÷ largura cadastrada em mm) × comprimento pedido em metros × largura pedida em mm`.

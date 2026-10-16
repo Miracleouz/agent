@@ -20,7 +20,7 @@ Na primeira atualização para esta política, os contadores antigos de conversa
 
 ## Consultar pela agenda
 
-Em **Contatos**, clique no **nome do contato** para abrir seu histórico. Essa consulta não assume a conversa, não limpa o contador de atendimento de outra pessoa e não envia mensagens. As mesmas permissões continuam valendo: Comercial não consulta o histórico de outro responsável; Admin pode observar sem transferir.
+Em **Contatos**, clique no **nome do contato** para abrir seu histórico. Na versão 1.13.0, essa consulta não assume a conversa, não limpa o contador de atendimento de outra pessoa e não envia mensagens. **A partir da 1.14.0, a leitura confirmada pelo WhatsApp também limpa o contador da conversa compartilhada, preservando seu responsável e seus alertas.** Veja [LEITURA_E_PAINEL_MP.md](LEITURA_E_PAINEL_MP.md). As mesmas permissões continuam valendo: Comercial não consulta o histórico de outro responsável; Admin pode observar sem transferir.
 
 **Conversar** continua sendo uma ação diferente: abre o atendimento manual e assume um chat livre, reutilizando o mesmo histórico. Consultas já gravadas continuam disponíveis mesmo sem o WhatsApp conectado. Um contato sem conversa mostra que não há mensagens disponíveis, sem criar um chat ou enviar uma primeira mensagem.
 

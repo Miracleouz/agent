@@ -1,5 +1,5 @@
 import {randomUUID} from 'node:crypto';
-import {normalize,demoProducts} from './catalog.js';
+import {normalize,demoProducts,mentionsBrand} from './catalog.js';
 import {parseBeltRequest,productBeltSpec,calculateBeltQuote,formatBeltCalculation,mergeBeltRequest} from './belts.js';
 import {classifyMessage,quoteSearchText} from './intents.js';
 import {Followups} from './followups.js';
@@ -7,7 +7,7 @@ import {splitBeltRequests} from './requests.js';
 import {helpActions,helpChoice,deliveryMethod,deliveryLabels,pickupQuestion,isPickupDetails,pickupQuoteText} from './conversation.js';
 export const introduction='Olá, sou o agente ROBINHO, vou te ajudar no atendimento nesse momento';
 const stopwords=new Set('a o os as de da do das dos em no na nos nas e um uma uns umas para por com sem quero queria preciso tem teria gostaria cotacao cotacoes cota cotar mim voce favor poderia poderiam orcamento orcar preco valor quanto custa sai manda enviar envia me pra pro favor bom boa dia tarde noite ola oi voces vc voce pode podem qual quais sao esta estao esse essa este aqui ai ver mais opcoes opcao modelo modelos comprar saber consegue conseguem arruma procura procurando estou buscando ve porfavor pfv jogo jogos unidade unidades aro medida medidas marca marcas meu minha carro'.split(' '));
-const synonyms={correias:'correia',sincronizadoras:'sincronizadora',sincronizadas:'sincronizadora',sincronizada:'sincronizadora',dentadas:'sincronizadora',dentada:'sincronizadora',abertas:'aberta',industriais:'industrial',trapezoidais:'trapezoidal',pneus:'pneu',celulares:'celular',smartphones:'celular',smartphone:'celular',baterias:'bateria',pecas:'peca',rodas:'roda',pneuzinho:'pneu'};
+const synonyms={sincr:'sincronizadora',sinc:'sincronizadora',sincron:'sincronizadora',sincrona:'sincronizadora',sincronas:'sincronizadora',correias:'correia',sincronizadoras:'sincronizadora',sincronizadas:'sincronizadora',sincronizada:'sincronizadora',dentadas:'sincronizadora',dentada:'sincronizadora',abertas:'aberta',industriais:'industrial',trapezoidais:'trapezoidal',pneus:'pneu',celulares:'celular',smartphones:'celular',smartphone:'celular',baterias:'bateria',pecas:'peca',rodas:'roda',pneuzinho:'pneu'};
 function tokens(text){return normalize(text).match(/[a-z]+|\d+/g)||[];}
 function near(a,b){if(a.length<5||b.length<5||Math.abs(a.length-b.length)>1)return false;let i=0,j=0,edits=0;while(i<a.length&&j<b.length){if(a[i]===b[j]){i++;j++;continue;}if(++edits>1)return false;if(a.length>=b.length)i++;if(b.length>=a.length)j++;}return edits+(i<a.length||j<b.length?1:0)<=1;}
 function meaningful(text){return tokens(text).map(t=>synonyms[t]||t).filter(t=>!stopwords.has(t)&&!['reais','real'].includes(t));}
@@ -17,7 +17,7 @@ export function searchProducts(products,query,{includeUnpriced=false,...pricingO
  let wanted=meaningful(s);
  const numbers=wanted.filter(t=>/^\d+$/.test(t));
  const brands=[...new Set(products.map(p=>normalize(p.brand)))];
- const requestedBrands=brands.filter(b=>s.includes(b));
+ const requestedBrands=brands.filter(b=>mentionsBrand(s,b));
  if(requestedBrands.length)wanted=wanted.filter(t=>!requestedBrands.some(b=>b.split(' ').includes(t)));
  const numericProfiles=[...s.matchAll(/(?:^|[^a-z0-9])(\d{1,2})[ -]*(vx?|l|p[jklm]|m)(?=[^a-z]|$)/g)];
  const codes=wanted.filter(t=>/^[a-z]{1,3}$/.test(t));

@@ -121,7 +121,7 @@ test('Admin registers five users in a batch, changes roles and transfers chats b
  await page.getByLabel('Usuários para cadastrar',{exact:true}).fill(lines);await page.getByLabel('Senha inicial da equipe',{exact:true}).fill('team-ui-fixture-12345');await page.getByRole('button',{name:'Cadastrar usuários',exact:true}).click();
  await expect(page.getByRole('dialog')).toHaveCount(0);await expect(page.getByRole('row').filter({hasText:'gestora@example.test'})).toContainText('Admin');await expect(page.getByRole('row').filter({hasText:'comercial1@example.test'})).toContainText('Comercial');
  await page.screenshot({path:'test-results/admin-team-roles.png',fullPage:true});
- await page.getByRole('button',{name:'Conversas',exact:true}).click();await page.locator('.chat-item').filter({hasText:'Cliente de teste'}).first().click();
+ await page.getByRole('button',{name:'Conversas',exact:true}).click();await page.getByRole('tab',{name:/Todos os atendimentos/}).click();await page.locator('.chat-item').filter({hasText:'Cliente de teste'}).first().click();
  async function transfer(target,name){await target.getByRole('button',{name:'Transferir',exact:true}).click();await target.getByLabel('Responsável pelo atendimento').selectOption({label:name+' · Comercial'});await target.getByRole('button',{name:'Confirmar transferência',exact:true}).click();await expect(target.getByRole('dialog')).toHaveCount(0);}
  await transfer(page,'Comercial Um');
  const contexts=[];
