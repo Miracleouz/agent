@@ -66,6 +66,8 @@ O lote aceita até 50 pessoas e só é aplicado se todos os registros forem vál
 
 ## Contatos e primeira mensagem manual
 
+Após conectar o WhatsApp, conversas, grupos e contatos salvos disponíveis são sincronizados automaticamente. Um Admin pode usar **Sincronizar WhatsApp** na aba WhatsApp ou Contatos para tentar novamente. Conversas livres aparecem em **Não lidas**; o Admin também possui **Todos os atendimentos**. Ao abrir um chat privado, são carregadas até 50 mensagens recentes disponíveis para consulta, sem respostas automáticas ao histórico antigo. Veja [SINCRONIZACAO_WHATSAPP.md](docs/SINCRONIZACAO_WHATSAPP.md).
+
 1. Abra **Contatos → Novo contato**. Informe nome, WhatsApp com DDD e, se quiser, empresa. Para números internacionais, use `+` e o código do país. No Brasil, `(11) 99999-9999` e `+55 (11) 99999-9999` identificam o mesmo cadastro.
 2. Conecte o WhatsApp da loja por QR e clique em **Conversar**. O número é consultado antes de abrir; se não estiver no WhatsApp, aparece um aviso. O sistema reaproveita o histórico confirmado e coloca uma conversa livre sob sua responsabilidade em modo manual.
 3. Digite a mensagem no campo de resposta manual e clique em **Enviar mensagem**. Cadastrar, editar e abrir um contato não enviam mensagem. O nome do atendente acompanha o texto conforme a configuração de assinaturas da loja.
@@ -154,6 +156,8 @@ A versão **1.10.0** adiciona a agenda **Contatos** e o início de conversa manu
 A versão **1.11.0** adiciona envio de fotos e edição de textos/legendas pelo painel multiusuário, com registro das versões anteriores. A migração acrescenta campos de mídia e auditoria ao banco existente, preservando mensagens, estoque, usuários e sessão. O histórico registrado permanece após fechar o painel, transferir o atendimento ou reiniciar o servidor usando o mesmo volume.
 
 A versão **1.11.1** melhora o diagnóstico de falha ao gerar QR e protege contra reconexões simultâneas. A espera do carregamento da autenticação passa a 90 segundos por padrão. Não altera o banco nem apaga a sessão; problemas específicos de perfil, permissões, DNS ou rede exigem conferir o código e o log da instalação.
+
+A versão **1.12.0** sincroniza listas de conversas, grupos e contatos salvos disponíveis no WhatsApp, e busca até 50 mensagens recentes ao abrir uma conversa privada. O histórico importado é apenas para consulta e nunca autoriza envios automáticos. O botão **Sincronizar WhatsApp** permite nova tentativa sem limpar a sessão. Responsáveis, pausas, pedidos, mensagens e fotos existentes são preservados.
 
 ## Cotações configuradas
 

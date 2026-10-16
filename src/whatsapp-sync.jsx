@@ -1,0 +1,6 @@
+import React from 'react';
+import {RefreshCw,CheckCircle2,AlertCircle} from 'lucide-react';
+export function WhatsAppSyncStatus({connection,act,busy}){
+ const sync=connection?.sync,loading=sync?.status==='loading';
+ return <div className="whatsapp-sync-status" role="status"><div>{sync?.error?<AlertCircle size={18}/>:<CheckCircle2 size={18}/>}<span><strong>{loading?'Sincronizando WhatsApp…':sync?.status==='ready'?'Listas do WhatsApp sincronizadas':sync?.error?'Sincronização incompleta':'Conversas, grupos e contatos do WhatsApp'}</strong><small>{loading?'Carregando as listas disponíveis, sem enviar mensagens.':sync?.completedAt?`${sync.chats} conversas · ${sync.groups} grupos · ${sync.contacts} contatos. ${sync.error||'Ao abrir um chat, carregamos até 50 mensagens recentes disponíveis.'}`:'Depois de conectar, as listas serão carregadas automaticamente. O histórico importado não aciona o agente.'}</small></span></div><button className="button compact" disabled={busy||loading||connection?.status!=='ready'} onClick={()=>act('/whatsapp/sync',{},'Sincronização iniciada. Nenhuma mensagem foi enviada.')}><RefreshCw size={15} className={loading?'spin':''}/>Sincronizar WhatsApp</button></div>;
+}

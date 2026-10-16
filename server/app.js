@@ -49,7 +49,7 @@ export function createApp({store,whatsapp,production=false,appUrl=process.env.AP
  });
  function getChat(id){const chat=store.chat(id);if(!chat)throw fail('Conversa não encontrada.',404);return chat;}
  function visibleChat(req){const chat=getChat(req.params.id);if(req.user.role!=='admin'&&chat.assigned_user_id&&chat.assigned_user_id!==req.user.id)throw fail('Esta conversa está com outro usuário.',403);return chat;}
- app.get('/api/chats/:id/messages',(req,res)=>{visibleChat(req);res.json(store.messages(req.params.id));});
+ app.get('/api/chats/:id/messages',(req,res)=>{const chat=visibleChat(req);whatsapp.loadHistory?.(chat).catch(()=>{});res.json(store.messages(req.params.id));});
  app.post('/api/chats/:id/read',(req,res)=>{const chat=visibleChat(req);if(chat.assigned_user_id===req.user.id){store.run('UPDATE chats SET unread=0 WHERE id=?',chat.id);store.changed();}res.json({ok:true});});
  function getGroup(id){const group=store.get('SELECT id FROM whatsapp_groups WHERE id=?',id);if(!group)throw fail('Grupo não encontrado.',404);return group;}
  app.get('/api/groups/:id/messages',(req,res)=>{getGroup(req.params.id);res.json(store.groupMessages(req.params.id));});
@@ -130,6 +130,7 @@ export function createApp({store,whatsapp,production=false,appUrl=process.env.AP
  async function syncStock(url){if(syncing)throw fail('Já existe uma sincronização em andamento.',409);syncing=true;try{const items=await fetchSheet(url);const count=replaceCatalog(store,items,'Google Sheets');store.setSettings({sheetUrl:url,lastSync:Date.now()});return count;}finally{syncing=false;}}
  app.post('/api/stock/sync',adminOnly,async(req,res)=>{const{url}=z.object({url:z.string().max(500)}).parse(req.body);res.json({count:await syncStock(url)});});
  app.post('/api/whatsapp/connect',adminOnly,async(_req,res)=>res.json(await whatsapp.connect()));
+ app.post('/api/whatsapp/sync',adminOnly,(req,res)=>{z.object({}).strict().parse(req.body||{});if(whatsapp.snapshot().status!=='ready')throw fail('Aguarde o WhatsApp ficar Conectado antes de sincronizar.',409);whatsapp.sync().catch(()=>{});res.status(202).json({ok:true});});
  app.post('/api/whatsapp/disconnect',adminOnly,async(_req,res)=>{await whatsapp.disconnect();res.json(whatsapp.snapshot());});
  app.use('/api',(_req,res)=>res.status(404).json({error:'Rota não encontrada.'}));
  app.use((err,_req,res,next)=>{
