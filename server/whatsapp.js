@@ -3,29 +3,37 @@ import QRCode from 'qrcode';
 import {existsSync} from 'node:fs';
 import {join} from 'node:path';
 import {photoInfo,maxPhotoBytes} from './images.js';
+import {connectionError,safeConnectionDetail,authenticationTimeout} from './connection-errors.js';
 const {Client,LocalAuth,MessageMedia}=wa;
 export class WhatsApp {
- constructor(store,dataDir,{clientFactory=options=>new Client(options)}={}){this.store=store;this.dataDir=dataDir;this.clientFactory=clientFactory;this.client=null;this.status='disconnected';this.qr=null;this.error=null;this.number=null;this.receiver=null;this.generation=0;this.mediaTasks=new Set();}
+ constructor(store,dataDir,{clientFactory=options=>new Client(options),logger=console}={}){this.store=store;this.dataDir=dataDir;this.clientFactory=clientFactory;this.logger=logger;this.client=null;this.status='disconnected';this.qr=null;this.error=null;this.number=null;this.receiver=null;this.generation=0;this.mediaTasks=new Set();}
  snapshot(){return {status:this.status,qr:this.qr,error:this.error,number:this.number,transport:'qr',nativeButtons:false};}
  update(status,error=null){this.status=status;this.error=error;if(status!=='ready')this.store.cancelFollowups(null,{whatsappOnly:true});this.store.changed();}
- async connect(){
+ connectionFailed(error){const diagnosis=connectionError(error);this.qr=null;this.number=null;this.update('error',`${diagnosis.message} Código: ${diagnosis.code}.`);this.store.event('whatsapp_error',this.error);this.logger.error(`[WhatsApp] ${diagnosis.code}: ${safeConnectionDetail(error)}`);}
+ connect(){
+  if(this.connecting)return this.connecting;
+  const task=this.startConnection();this.connecting=task;return task.finally(()=>{if(this.connecting===task)this.connecting=null;});
+ }
+ async startConnection(){
   if(this.client&&['starting','qr','authenticated','ready'].includes(this.status))return this.snapshot();
-  if(this.client){await this.client.destroy().catch(()=>{});this.client=null;}
+  const generation=++this.generation;
+  const previous=this.client;this.client=null;if(previous)await previous.destroy().catch(()=>{});
+  if(this.generation!==generation)return this.snapshot();
   const executablePath=process.env.CHROME_PATH||['/usr/bin/chromium','/usr/bin/chromium-browser','/usr/bin/google-chrome'].find(existsSync);
-  if(!executablePath)throw new Error('Chromium não encontrado. Instale chromium ou configure CHROME_PATH.');
+  if(!executablePath||!existsSync(executablePath)){this.connectionFailed(new Error('Chromium não encontrado. Confira CHROME_PATH.'));return this.snapshot();}
   const args=['--no-sandbox','--disable-setuid-sandbox','--disable-dev-shm-usage'];
   let proxyAuthentication;
   const proxy=process.env.HTTPS_PROXY||process.env.https_proxy;
-  if(proxy){const url=new URL(proxy);args.push(`--proxy-server=${url.protocol}//${url.host}`);if(url.username)proxyAuthentication={username:decodeURIComponent(url.username),password:decodeURIComponent(url.password)};}
-  this.qr=null;this.number=null;this.update('starting');const generation=++this.generation;
-  const client=this.clientFactory({authStrategy:new LocalAuth({dataPath:join(this.dataDir,'whatsapp')}),puppeteer:{headless:true,executablePath,args},...(proxyAuthentication?{proxyAuthentication}:{}),webVersionCache:{type:'local',path:join(this.dataDir,'web-cache')}});
+  if(proxy){try{const url=new URL(proxy);args.push(`--proxy-server=${url.protocol}//${url.host}`);if(url.username)proxyAuthentication={username:decodeURIComponent(url.username),password:decodeURIComponent(url.password)};}catch{this.connectionFailed(new Error('Proxy configuration failed: endereço inválido.'));return this.snapshot();}}
+  this.qr=null;this.number=null;this.update('starting');
+  let client;try{client=this.clientFactory({authStrategy:new LocalAuth({dataPath:join(this.dataDir,'whatsapp')}),authTimeoutMs:authenticationTimeout(process.env.WHATSAPP_AUTH_TIMEOUT_MS),puppeteer:{headless:true,executablePath,args},...(proxyAuthentication?{proxyAuthentication}:{}),webVersionCache:{type:'local',path:join(this.dataDir,'web-cache')}});}catch(error){this.connectionFailed(error);return this.snapshot();}
   let readyAt=null;
   this.client=client;
-  client.on('qr',async code=>{const qr=await QRCode.toDataURL(code,{width:300,margin:2});if(this.generation!==generation)return;this.qr=qr;this.update('qr');});
-  client.on('authenticated',()=>{if(this.generation!==generation)return;this.qr=null;this.update('authenticated');});
-  client.on('ready',()=>{if(this.generation!==generation)return;readyAt=Math.floor(Date.now()/1000);this.qr=null;this.number=client.info?.wid?.user||null;this.update('ready');this.store.event('whatsapp','WhatsApp conectado.');this.loadGroups(client,generation).catch(()=>{if(this.generation===generation&&this.status==='ready')this.store.event('groups_error','Não foi possível carregar a lista de grupos. Novas mensagens de grupos continuam somente para consulta.');});});
+  client.on('qr',async code=>{try{const qr=await QRCode.toDataURL(code,{width:300,margin:2});if(this.generation!==generation||this.status==='error')return;this.qr=qr;this.update('qr');}catch(error){if(this.generation===generation&&this.status!=='error')this.connectionFailed(error);}});
+  client.on('authenticated',()=>{if(this.generation!==generation||this.status==='error')return;this.qr=null;this.update('authenticated');});
+  client.on('ready',()=>{if(this.generation!==generation||this.status==='error')return;readyAt=Math.floor(Date.now()/1000);this.qr=null;this.number=client.info?.wid?.user||null;this.update('ready');this.store.event('whatsapp','WhatsApp conectado.');this.loadGroups(client,generation).catch(()=>{if(this.generation===generation&&this.status==='ready')this.store.event('groups_error','Não foi possível carregar a lista de grupos. Novas mensagens de grupos continuam somente para consulta.');});});
   client.on('auth_failure',()=>{if(this.generation===generation)this.update('error','A sessão expirou. Desconecte e leia um novo QR Code.');});
-  client.on('disconnected',()=>{if(this.generation===generation){this.qr=null;this.number=null;this.update('disconnected','A conexão foi encerrada. Conecte novamente no painel.');}});
+  client.on('disconnected',()=>{if(this.generation===generation&&this.status!=='error'){this.qr=null;this.number=null;this.update('disconnected','A conexão foi encerrada. Conecte novamente no painel.');}});
   client.on('message',message=>{
    if(this.generation!==generation||this.client!==client||this.status!=='ready'||readyAt===null)return;
    const group=/^\d+(?:-\d+)?@g\.us$/.test(message.from);
@@ -52,7 +60,7 @@ export class WhatsApp {
     }).catch(()=>{});this.mediaTasks.add(task);task.finally(()=>this.mediaTasks.delete(task));
    }
   });
-  client.initialize().catch(()=>{if(this.generation===generation)this.update('error','Não foi possível abrir o WhatsApp Web. Verifique a rede, a liberação de web.whatsapp.com e tente reconectar.');});
+  Promise.resolve().then(()=>client.initialize()).catch(error=>{if(this.generation===generation)this.connectionFailed(error);});
   return this.snapshot();
  }
  async loadGroups(client,generation){

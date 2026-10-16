@@ -54,6 +54,8 @@ Ajustes opcionais estão em `.env.example`. Crie um `.env` local se necessário;
 
 No painel, abra **WhatsApp → Gerar QR Code**. No celular, abra **Aparelhos conectados → Conectar um aparelho** e leia o código. A aplicação não envia mensagens antes de conectar; o simulador nunca aciona números reais. A conta conectada recebe respostas nas novas mensagens de conversas individuais enquanto o servidor estiver funcionando.
 
+Se o QR não aparecer, consulte [Diagnóstico do QR](docs/DIAGNOSTICO_QR.md). O painel diferencia falhas de navegador, perfil ocupado, rede, certificados e permissões; `npm run whatsapp:diagnose` testa um perfil temporário sem parear números ou usar a sessão existente. No Docker, use `docker compose exec cota npm run whatsapp:diagnose`.
+
 A sessão fica em `data/whatsapp`. Para reconectar automaticamente após reiniciar, defina `WHATSAPP_AUTO_CONNECT=true`. Se o aparelho revogar ou expirar a sessão, leia um novo QR. Uma sessão deve ser usada por uma única instância do servidor.
 
 ### Acesso da equipe em vários computadores
@@ -115,6 +117,7 @@ npm run test:followups
 npm run test:inactivity
 npm run test:contacts
 npm run test:messages
+npm run test:connection
 npm run test:conversations
 npm run test:team
 npm run build
@@ -123,7 +126,7 @@ npm run test:ui
 
 Os testes de navegador usam o Chromium local (`CHROME_PATH` pode sobrescrever) e um servidor/banco temporário isolado na porta 3101. Cobrem cadastro, cinco opções, paginação, alerta de atendente, resposta manual, reativação, importação confirmada e layout móvel. Não dependem de um número de WhatsApp nem enviam mensagens a clientes. A geração de um QR real foi validada separadamente; pareamento e entrega a um contato real dependem da leitura pelo dono e não foram feitos automaticamente.
 
-Na versão **1.11.0**, passaram **2.138 testes automatizados**, **16 testes de navegador** e o build de produção. O [relatório de histórico, fotos e edições](docs/TESTES_HISTORICO_FOTOS_EDICAO.md) descreve os **326 novos testes**, incluindo persistência após reiniciar, transferências, permissões, edição e bloqueio de reenvios. O [relatório de contatos e início manual](docs/TESTES_CONTATOS_300.md) registra os 350 testes de contatos acrescentados na versão anterior. O [relatório de inatividade e 300 conversas](docs/TESTES_INATIVIDADE_300.md) documenta 300 combinações de saudações e cotações pelo adaptador QR simulado e outros 40 cenários sem primeiro contato ou com eventos ignorados durante o atendimento. Os relatórios anteriores registram o comportamento de cada versão; o encerramento por inatividade desta versão substitui o menu de cinco minutos das versões anteriores.
+Na versão **1.11.1**, passaram **2.186 testes automatizados**, **17 testes de navegador** e o build de produção. A [verificação do diagnóstico de QR](docs/DIAGNOSTICO_QR.md) registra 48 testes novos e geração de QR com Chromium real, sem pareamento. O [relatório de histórico, fotos e edições](docs/TESTES_HISTORICO_FOTOS_EDICAO.md) descreve os **326 testes acrescentados na versão 1.11.0**, incluindo persistência após reiniciar, transferências, permissões, edição e bloqueio de reenvios. O [relatório de contatos e início manual](docs/TESTES_CONTATOS_300.md) registra os 350 testes de contatos acrescentados na versão anterior. O [relatório de inatividade e 300 conversas](docs/TESTES_INATIVIDADE_300.md) documenta 300 combinações de saudações e cotações pelo adaptador QR simulado e outros 40 cenários sem primeiro contato ou com eventos ignorados durante o atendimento. Os relatórios anteriores registram o comportamento de cada versão; o encerramento por inatividade desta versão substitui o menu de cinco minutos das versões anteriores.
 
 A bateria de intenções exercita **180 mensagens diferentes** pelo fluxo completo do agente, com expectativas escritas nos testes. Inclui cotação, compra, negação, condição, abreviações, erros de escrita e respostas ambíguas. Veja o [relatório dos testes de intenção](docs/TESTES_INTENCOES.md). Esses resultados cobrem os casos do corpus; a interpretação usa regras locais e não garante entendimento de qualquer frase possível.
 

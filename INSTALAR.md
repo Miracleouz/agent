@@ -153,6 +153,8 @@ A versão **1.10.0** adiciona a agenda **Contatos** e o início de conversa manu
 
 A versão **1.11.0** adiciona envio de fotos e edição de textos/legendas pelo painel multiusuário, com registro das versões anteriores. A migração acrescenta campos de mídia e auditoria ao banco existente, preservando mensagens, estoque, usuários e sessão. O histórico registrado permanece após fechar o painel, transferir o atendimento ou reiniciar o servidor usando o mesmo volume.
 
+A versão **1.11.1** melhora o diagnóstico de falha ao gerar QR e protege contra reconexões simultâneas. A espera do carregamento da autenticação passa a 90 segundos por padrão. Não altera o banco nem apaga a sessão; problemas específicos de perfil, permissões, DNS ou rede exigem conferir o código e o log da instalação.
+
 ## Cotações configuradas
 
 - **Abertas:** `(preço por metro da faixa inteira ÷ largura cadastrada em mm) × comprimento pedido em metros × largura pedida em mm`.
@@ -170,6 +172,7 @@ Por QR Code, o cliente usa **MAIS** e **ATENDENTE** como comandos. Os botões cl
 - **Erro de conexão com o Docker:** espere o mecanismo terminar de iniciar; no Windows, confira se o WSL 2 está funcionando.
 - **Porta 3000 ocupada:** pare a outra aplicação ou altere somente a primeira porta do mapeamento em `compose.yaml`, por exemplo de `3000:3000` para `3001:3000`; nesse caso, abra `localhost:3001`.
 - **QR expirou:** gere outro no painel. Se o celular revogar a sessão, conecte novamente.
+- **QR não aparece:** a partir da versão 1.11.1, o painel informa a categoria do erro e `docker compose logs --tail=100 cota` mostra a linha técnica `[WhatsApp]`. O comando `docker compose exec cota npm run whatsapp:diagnose` testa Chromium e rede com um perfil temporário, sem acessar ou apagar sua sessão. Veja [DIAGNOSTICO_QR.md](docs/DIAGNOSTICO_QR.md). A porta 3000 acessível não confirma que o navegador interno conseguiu iniciar.
 - **Google Sheets não abre:** importe seu Excel pelo painel ou ajuste o compartilhamento da planilha.
 
 O código, o build e os fluxos do painel foram testados no ambiente Node.js/Chromium da nuvem. A instalação por Docker precisa concluir o build no computador de destino; a imagem Docker não foi construída neste ambiente.
