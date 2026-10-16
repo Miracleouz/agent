@@ -1,4 +1,5 @@
 import {test,expect} from '@playwright/test';
+import {industrialStock} from '../fixtures/industrial-stock.js';
 test('owner can quote, paginate, take over, answer, resume and replace inventory',async({page})=>{
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto('/');await expect(page.getByRole('heading',{name:'Vamos começar?'})).toBeVisible();
@@ -77,4 +78,20 @@ test('owner configures followup delay and quotes AT10 33000 as 33 meters',async(
  async function send(body){await page.getByRole('button',{name:'Testar agente',exact:true}).click();await page.getByRole('dialog').getByRole('combobox').selectOption('demo-outro');await page.getByLabel('Mensagem do cliente').fill(body);await page.getByRole('button',{name:'Enviar teste',exact:true}).click();}
  await send('AT10 33000');await expect(page.locator('.message-body').last()).toContainText('Qual é a largura');
  await send('25');await expect(page.locator('.message-body').last()).toContainText('33 m × 25 mm');await expect(page.locator('.message-body').last()).toContainText('1.881,00 por corte');
+});
+test('ROBINHO greets site visitors and quotes all items including finished and cut PK belts',async({page})=>{
+ await page.goto('/');await page.getByLabel('E-mail',{exact:true}).fill('marina@example.test');await page.getByLabel('Senha',{exact:true}).fill('owner-pass-test-123');await page.getByRole('button',{name:'Entrar no painel',exact:true}).click();
+ await page.getByRole('button',{name:'Estoque',exact:true}).click();
+ const csv='sku;produto;marca;medida;preco;quantidade;unidade\n'+industrialStock.map(item=>[item.sku,item.name,item.brand,item.variant,item.price,item.quantity,item.unit].join(';')).join('\n');
+ await page.getByLabel('Importar estoque').setInputFiles({name:'multiplas-correias.csv',mimeType:'text/csv',buffer:Buffer.from(csv)});await page.getByRole('button',{name:'Substituir estoque',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
+ await page.getByRole('button',{name:'Conversas',exact:true}).click();
+ await page.evaluate(async()=>{await fetch('/api/simulator',{method:'DELETE',headers:{'X-Cota-Request':'1'}});});await page.reload();
+ async function send(body){await page.getByRole('button',{name:'Testar agente',exact:true}).click();await page.getByLabel('Mensagem do cliente').fill(body);await page.getByRole('button',{name:'Enviar teste',exact:true}).click();}
+ const hello='Olá, sou o agente ROBINHO, vou te ajudar no atendimento nesse momento';
+ await send('oi vim pelo site');await expect(page.locator('.message-body').last()).toHaveText(hello);
+ await send('cotar corr B 72\ncorreia a 89\ncorreia 3VX 500');const quote=page.locator('.message-body').last();
+ await expect(quote).toContainText('Cotação dos 3 itens');for(const reference of ['B 72','A 89','3VX 500'])await expect(quote).toContainText(reference);
+ await expect(quote).toContainText('R$');await expect(quote).toContainText('15.');await expect(page.locator('.message-body').filter({hasText:hello})).toHaveCount(1);
+ await send('4 PK 650');await expect(page.locator('.message-body').last()).toContainText('peça pronta');await expect(page.locator('.message-body').last()).toContainText('por friso × 4 frisos');
+ await page.screenshot({path:'test-results/robinho-pk-quote.png',fullPage:true});
 });

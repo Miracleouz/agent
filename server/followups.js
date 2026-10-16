@@ -10,7 +10,8 @@ export class Followups {
  constructor(agent,{now=Date.now,canSend=()=>true}={}){this.agent=agent;this.store=agent.store;this.now=now;this.canSend=canSend;this.running=false;this.closed=false;}
  schedule(chatId,quoteId){
   const chat=this.store.chat(chatId),settings=this.store.settings(),now=this.now();
-  if(this.closed||!chat||!settings.agentEnabled||settings.followupMinutes<=0||chat.mode!=='auto'||chat.needs_human||chat.closed_at||chat.followup_last_attempt!==null&&now-chat.followup_last_attempt<cooldown)return;
+  const inbound=this.store.get("SELECT id FROM messages WHERE chat_id=? AND direction='in' AND rowid<(SELECT rowid FROM messages WHERE id=?) LIMIT 1",chatId,quoteId);
+  if(this.closed||!chat||!inbound||!settings.agentEnabled||settings.followupMinutes<=0||chat.mode!=='auto'||chat.needs_human||chat.closed_at||chat.followup_last_attempt!==null&&now-chat.followup_last_attempt<cooldown)return;
   this.store.run("UPDATE chats SET followup_due_at=?,followup_quote_id=?,followup_state='scheduled',followup_menu=0 WHERE id=?",now+settings.followupMinutes*60000,quoteId,chatId);this.store.changed();
  }
  async check(){
@@ -32,11 +33,12 @@ export class Followups {
   const chat=this.store.chat(id),settings=this.store.settings(),now=this.now();
   if(!chat||chat.followup_state!=='scheduled'||chat.followup_due_at>now)return false;
   const latest=this.store.get('SELECT * FROM messages WHERE chat_id=? ORDER BY created DESC,rowid DESC LIMIT 1',id);
+  const inbound=latest&&this.store.get("SELECT id FROM messages WHERE chat_id=? AND direction='in' AND rowid<(SELECT rowid FROM messages WHERE id=?) LIMIT 1",id,latest.id);
   if(this.closed||!settings.agentEnabled||settings.followupMinutes<=0||chat.mode!=='auto'||chat.needs_human||chat.closed_at
    ||!chat.followup_due_at||now-chat.followup_due_at>maxDelay
    ||chat.followup_last_attempt!==null&&now-chat.followup_last_attempt<cooldown
    ||chat.channel!=='simulator'&&!privatePhone(chat.phone)||!this.canSend(chat)
-   ||!latest||latest.id!==chat.followup_quote_id||latest.direction!=='bot'||latest.status!=='sent'){
+   ||!inbound||!latest||latest.id!==chat.followup_quote_id||latest.direction!=='bot'||latest.status!=='sent'){
    this.store.cancelFollowups(id);return false;
   }
   // Claim durably before sending. Crashes, concurrent ticks and uncertain sends never retry.

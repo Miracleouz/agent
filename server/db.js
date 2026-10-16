@@ -21,7 +21,7 @@ export class Store extends EventEmitter {
    CREATE TABLE IF NOT EXISTS events(id TEXT PRIMARY KEY, kind TEXT NOT NULL, detail TEXT NOT NULL, created INTEGER NOT NULL);
   `);
   if(!this.all('PRAGMA table_info(chats)').some(column=>column.name==='pending_measure'))this.db.exec('ALTER TABLE chats ADD COLUMN pending_measure TEXT');
-  for(const [name,type] of [['quoted_options',"TEXT NOT NULL DEFAULT '[]'"],['pending_selection','INTEGER'],['handoff_reason','TEXT'],['purchase_summary','TEXT'],['followup_due_at','INTEGER'],['followup_quote_id','TEXT'],['followup_last_attempt','INTEGER'],['followup_state',"TEXT NOT NULL DEFAULT 'idle'"],['followup_menu','INTEGER NOT NULL DEFAULT 0'],['closed_at','INTEGER']]){
+  for(const [name,type] of [['quoted_options',"TEXT NOT NULL DEFAULT '[]'"],['pending_selection','INTEGER'],['handoff_reason','TEXT'],['purchase_summary','TEXT'],['followup_due_at','INTEGER'],['followup_quote_id','TEXT'],['followup_last_attempt','INTEGER'],['followup_state',"TEXT NOT NULL DEFAULT 'idle'"],['followup_menu','INTEGER NOT NULL DEFAULT 0'],['closed_at','INTEGER'],['introduced_at','INTEGER'],['batch_queries',"TEXT NOT NULL DEFAULT '[]'"],['pending_item_index','INTEGER']]){
    if(!this.all('PRAGMA table_info(chats)').some(column=>column.name===name))this.db.exec(`ALTER TABLE chats ADD COLUMN ${name} ${type}`);
   }
   this.db.prepare('INSERT OR IGNORE INTO settings VALUES(1,?)').run(JSON.stringify({priceMode:'sale',markupPercent:0,mmDimension:'width',openBeltPriceBasis:'per_meter_full_width',businessName:'Minha loja',pauseMinutes:30,sheetUrl:DEFAULT_SHEET,syncMinutes:0,agentEnabled:true,lastSync:null}));

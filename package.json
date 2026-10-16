@@ -1,6 +1,6 @@
 {
   "name": "cota-whatsapp",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -13,6 +13,7 @@
     "test": "node --test tests/*.test.js",
     "test:intents": "node --test tests/intents.test.js",
     "test:followups": "node --test tests/followups.test.js tests/open-length.test.js tests/whatsapp.test.js",
+    "test:conversations": "node --test tests/conversations.test.js tests/multi-quotes.test.js",
     "test:ui": "playwright test",
     "stock:sync": "node --env-file-if-exists=.env server/import-stock.js",
     "stock:import": "node --env-file-if-exists=.env server/import-stock.js"

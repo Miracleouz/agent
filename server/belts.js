@@ -44,7 +44,7 @@ export function parseBeltRequest(query){
    return `${profile.replace(/\s/g,'')} aberta `;
   });
  }
- reference=reference.replace(/\b(\d{1,3})\s*(dpj|dpk|pj|pk|pl|pm|ph)[ -]*(\d{2,6})\b/g,(_all,ribs,profile,length)=>{put('ribs',Number(ribs));return `${profile} ${length}`;});
+ reference=reference.replace(/\b(\d{1,3})[ -]*(dpj|dpk|pj|pk|pl|pm|ph)[ -]*(\d{2,6})\b/g,(_all,ribs,profile,length)=>{put('ribs',Number(ribs));return `${profile} ${length}`;});
  const lengthToMeters=(n,unit)=>numeric(n)/(unit==='mm'||unit.startsWith('milimetro')?1000:unit==='cm'||unit.startsWith('centimetro')?100:1);
  reference=reference.replace(/\b(?:comprimento|comprido)\s*(?:de\s*)?(\d+(?:[.,]\d+)?)\s*(milimetros?|centimetros?|metros?|mm|cm|m)\b/g,(_all,n,unit)=>{put('meters',lengthToMeters(n,unit));return ' ';});
  reference=reference.replace(/\b(\d+(?:[.,]\d+)?)\s*(milimetros?|centimetros?|metros?|mm|cm|m)\s*(?:de\s+)?(?:comprimento|comprido)\b/g,(_all,n,unit)=>{put('meters',lengthToMeters(n,unit));return ' ';});
@@ -67,7 +67,7 @@ export function productBeltSpec(product){
  const unit=billingUnit(product.unit);
  const ribs=[...reference.matchAll(ribsPattern)].map(m=>numeric(m[1]));
  const widths=[...reference.matchAll(mmPattern)].map(m=>numeric(m[1]));
- const compact=reference.match(/\b(\d{1,3})\s*(dpj|dpk|pj|pk|pl|pm|ph)[ -]*(\d{2,6})\b/);
+ const compact=reference.match(/\b(\d{1,3})[ -]*(dpj|dpk|pj|pk|pl|pm|ph)[ -]*(\d{2,6})\b/);
  if(compact){ribs.push(Number(compact[1]));reference=reference.replace(compact[0],`${compact[2]} ${compact[3]}`);}
  const shorthand=reference.match(/\b(\d{3,6})[\s/x-]+((?:s|d)?\d+m|[a-z]{1,3}\d+|[a-z]{1,3})[\s/x-]+(\d{1,4})(?=\s|$)/);
  if(shorthand){widths.push(Number(shorthand[3]));reference=reference.replace(shorthand[0],`${shorthand[1]} ${shorthand[2]}`);}
@@ -160,6 +160,7 @@ export function formatBeltCalculation(product,request,quote,{mmDimension='width'
   line=`${money(product.price)}/m × ${amount(factor)} m = *${money(each)} por corte*`;
  }else{
   description=product.name+(product.variant?' '+product.variant:'');
+  if(request.ribs!==null)description+=` · peça pronta · ${amount(request.ribs)} ${request.ribWord==='canal'?'canais':'frisos'}`;
   line=`*${money(each)}* por ${product.unit||'unidade'}`;
  }
  if(quantity>1)line+=`\n   ${amount(quantity)} ${spec.unit==='piece'?'peças':'correias'}: *${money(total)} no total*`;

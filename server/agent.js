@@ -3,6 +3,8 @@ import {normalize,demoProducts} from './catalog.js';
 import {parseBeltRequest,productBeltSpec,calculateBeltQuote,formatBeltCalculation,mergeBeltRequest} from './belts.js';
 import {classifyMessage,quoteSearchText} from './intents.js';
 import {Followups,followupActions} from './followups.js';
+import {splitBeltRequests} from './requests.js';
+export const introduction='Olá, sou o agente ROBINHO, vou te ajudar no atendimento nesse momento';
 const stopwords=new Set('a o os as de da do das dos em no na nos nas e um uma uns umas para por com sem quero queria preciso tem teria gostaria cotacao cotacoes cota cotar mim voce favor poderia poderiam orcamento orcar preco valor quanto custa sai manda enviar envia me pra pro favor bom boa dia tarde noite ola oi voces vc voce pode podem qual quais sao esta estao esse essa este aqui ai ver mais opcoes opcao modelo modelos comprar saber consegue conseguem arruma procura procurando estou buscando ve porfavor pfv jogo jogos unidade unidades aro medida medidas marca marcas meu minha carro'.split(' '));
 const synonyms={correias:'correia',sincronizadoras:'sincronizadora',sincronizadas:'sincronizadora',sincronizada:'sincronizadora',dentadas:'sincronizadora',dentada:'sincronizadora',abertas:'aberta',industriais:'industrial',trapezoidais:'trapezoidal',pneus:'pneu',celulares:'celular',smartphones:'celular',smartphone:'celular',baterias:'bateria',pecas:'peca',rodas:'roda',pneuzinho:'pneu'};
 function tokens(text){return normalize(text).match(/[a-z]+|\d+/g)||[];}
@@ -26,8 +28,8 @@ export function searchProducts(products,query,{includeUnpriced=false,...pricingO
   if(!calculation.ok&&!calculation.missing&&!calculation.review)continue;
   if(request.budget!==null&&calculation.ok&&!calculation.unpriced&&calculation.total>request.budget)continue;
   const spec=calculation.spec||productBeltSpec(product);
-  const reference=spec.reference+' '+(product.sku?.startsWith('AUTO-')?'':normalize(product.sku));
-  const words=tokens(reference+' '+product.brand).map(t=>synonyms[t]||t);
+  const reference=spec.reference;
+  const words=tokens(reference+' '+product.brand+' '+(product.sku?.startsWith('AUTO-')?'':normalize(product.sku))).map(t=>synonyms[t]||t);
   const score=wanted.filter(t=>words.includes(t)||(t.length>3&&words.some(w=>w.startsWith(t)||t.startsWith(w)||near(t,w)))).length;
   const valid=numericProfiles.every(m=>new RegExp('(?:^|[^a-z0-9])'+m[1]+'[ -]*'+m[2]+'(?=[^a-z]|$)').test(reference))
    &&profiles.every(m=>new RegExp('(?:^|[^a-z])'+m[1]+'[ -]*'+m[2]+'(?:[^0-9]|$)').test(reference))
@@ -37,6 +39,16 @@ export function searchProducts(products,query,{includeUnpriced=false,...pricingO
   if(valid)ranked.push({product,score,price:calculation.total??product.price});
  }
  ranked.sort((a,b)=>b.score-a.score||a.price-b.price);
+ if(request.ribs!==null&&/\b(?:dpk|pk)[ -]*\d/.test(s)){
+  const ordered=[],remaining=[...ranked],seenBrands=new Set(),seenUnits=new Set();
+  while(remaining.length){
+   const fresh=remaining.filter(item=>!seenBrands.has(normalize(item.product.brand)));
+   const candidates=fresh.length?fresh:remaining;
+   const pick=candidates.find(item=>!seenUnits.has(productBeltSpec(item.product).unit))||candidates[0];
+   ordered.push(pick.product);seenBrands.add(normalize(pick.product.brand));seenUnits.add(productBeltSpec(pick.product).unit);remaining.splice(remaining.indexOf(pick),1);
+  }
+  return ordered;
+ }
  const first=[],rest=[],seen=new Set();
  for(const {product} of ranked){const brand=normalize(product.brand);if(!seen.has(brand)){first.push(product);seen.add(brand);}else rest.push(product);}
  return [...first,...rest];
@@ -44,15 +56,18 @@ export function searchProducts(products,query,{includeUnpriced=false,...pricingO
 export const actionMore={id:'more',label:'Ver mais'},actionHuman={id:'human',label:'Falar com atendente'};
 export function intent(text,context){return classifyMessage(text,context).type;}
 export function quoteReply(products,query,shown=[],options={}){
+ const items=splitBeltRequests(query);
+ if(items.length>1)return quoteBatchReply(products,items,shown,options);
  const request=parseBeltRequest(query);
  if(request.error)return {body:request.error,actions:[actionHuman],ids:[]};
  if(!/\d/.test(request.reference))return {body:'Qual é o perfil e a referência da correia? Por exemplo: PJ 350, 5 frisos; A42 por peça; ou 1200 8M com a medida de corte em mm.',actions:[actionHuman],ids:[]};
  let matches=searchProducts(products,query,options);
  const missing=[...new Set(matches.map(p=>calculateBeltQuote(p,request,options).missing).filter(Boolean))];
- if(missing.length){
-  const questions={ribs:'Quantos frisos ou canais você precisa em cada correia?',mm:'Qual é a largura de corte, em milímetros, para cada correia?',fixedWidth:'Qual é a largura da correia aberta em milímetros?',meters:'Qual é o comprimento desejado em metros para cada corte da correia aberta?'};
+ const questions={ribs:'Quantos frisos ou canais você precisa em cada correia?',mm:'Qual é a largura de corte, em milímetros, para cada correia?',fixedWidth:'Qual é a largura da correia aberta em milímetros?',meters:'Qual é o comprimento desejado em metros para cada corte da correia aberta?'};
+ if(missing.length&&!matches.some(p=>calculateBeltQuote(p,request,options).ok)){
   return {body:questions[missing[0]]+' Assim calculo o valor usando a unidade correta do estoque.',actions:[actionHuman],ids:[],awaiting:missing[0]};
  }
+ matches=matches.filter(p=>!calculateBeltQuote(p,request,options).missing);
  const review=matches.filter(p=>calculateBeltQuote(p,request,options).review);matches=matches.filter(p=>!calculateBeltQuote(p,request,options).review);
  if(!matches.length&&review.length)return {body:'Vou chamar um atendente para confirmar a base de preço e as medidas do estoque desta correia aberta antes de informar o valor.',actions:[],ids:[],needsHuman:true};
  const unique=[],seen=new Set();
@@ -63,11 +78,26 @@ export function quoteReply(products,query,shown=[],options={}){
  let body=`${shown.length?'Aqui vão mais':'Encontrei'} ${page.length} ${page.length===1?'opção disponível':'opções disponíveis'} para você:\n\n`;
  body+=page.map((p,i)=>{const detail=formatBeltCalculation(p,request,calculateBeltQuote(p,request,options),options);return `${i+1}. *${p.brand}* · ${detail.description}\n   ${detail.line}`;}).join('\n\n');
  if(page.length<5)body+='\n\nEstas são todas as opções restantes em estoque para essa busca.';
+ if(missing.length)body+='\n\nTambém há opções por corte que precisam de medidas. Para cotar essas opções: '+questions[missing[0]];
  body+='\n\nQual opção te interessou? Preços, disponibilidade e possibilidade de corte sujeitos à confirmação; esta cotação não reserva estoque.';
  return {body,actions:[...(remaining.length>5?[actionMore]:[]),actionHuman],ids:page.map(p=>p.id),quotedOptions:page.map(p=>({id:p.id,brand:p.brand,...formatBeltCalculation(p,request,calculateBeltQuote(p,request,options),options)}))};
 }
+function quoteBatchReply(products,items,shown,options){
+ if(items.length>10)return {body:`Recebi ${items.length} referências. Envie até 10 itens por mensagem para eu conferir todas as medidas e opções sem deixar itens de fora.`,actions:[actionHuman],ids:[],batchQueries:[]};
+ const results=items.map(item=>quoteReply(products,item,shown,options));
+ const quotedOptions=[],ids=[],sections=[];
+ for(const [itemIndex,result] of results.entries()){
+  const offset=quotedOptions.length;
+  const text=result.body.replace(/^([1-5])\. \*/gm,(_all,n)=>`${offset+Number(n)}. *`).replace(/\n\nQual opção te interessou\?[\s\S]*$/,'');
+  sections.push(`*Item ${itemIndex+1} · ${parseBeltRequest(items[itemIndex]).reference.toUpperCase()}*\n${text}`);
+  quotedOptions.push(...(result.quotedOptions||[]).map(option=>({...option,itemIndex,itemQuery:items[itemIndex]})));
+  ids.push(...result.ids);
+ }
+ const pendingItemIndex=results.findIndex(result=>result.awaiting),needsHuman=results.some(result=>result.needsHuman);
+ return {body:`Cotação dos ${items.length} itens solicitados:\n\n${sections.join('\n\n──────────\n\n')}\n\n${pendingItemIndex>=0?`Para completar o item ${pendingItemIndex+1}, responda à pergunta de medida acima.`:'Qual opção de cada item te interessou? Esta cotação não reserva estoque; a equipe confirma disponibilidade e cortes.'}`,actions:[...(results.some(result=>result.actions?.some(action=>action.id==='more'))?[actionMore]:[]),actionHuman],ids:[...new Set(ids)],quotedOptions,batchQueries:items,pendingItemIndex:pendingItemIndex>=0?pendingItemIndex:null,awaiting:pendingItemIndex>=0?results[pendingItemIndex].awaiting:null,needsHuman};
+}
 export class Agent {
- constructor(store,send,options={}){this.store=store;this.send=send;this.queues=new Map();this.followups=new Followups(this,options);}
+ constructor(store,send,options={}){this.store=store;this.send=send;this.now=options.now||Date.now;this.queues=new Map();this.followups=new Followups(this,options);}
  enqueue(key,fn){const next=(this.queues.get(key)||Promise.resolve()).catch(()=>{}).then(fn);this.queues.set(key,next);next.finally(()=>{if(this.queues.get(key)===next)this.queues.delete(key);}).catch(()=>{});return next;}
  receive(input){
   // Cancel a pending reminder as soon as a valid inbound message enters the queue.
@@ -79,16 +109,25 @@ export class Agent {
  }
  async process({phone,name,body,providerId,channel='whatsapp',provider='qr',isGroup=false,fromMe=false,isStatus=false,forceHuman=false}){
   if(isGroup||fromMe||isStatus||/@g\.us$|@broadcast$|@newsletter$/.test(phone))return{ignored:true};if(!body?.trim())return{ignored:true};if(providerId&&this.store.get('SELECT id FROM messages WHERE provider_id=?',providerId))return{duplicate:true};this.store.resumeExpired();
-  let chat=this.store.get('SELECT * FROM chats WHERE phone=? AND channel=? AND provider=?',phone,channel,provider);const now=Date.now();if(!chat){const id=randomUUID();this.store.run('INSERT INTO chats(id,phone,name,channel,provider,updated,last_inbound) VALUES(?,?,?,?,?,?,?)',id,phone,name||phone.replace(/@.*$/,''),channel,provider,now,now);chat=this.store.chat(id);}
+  let chat=this.store.get('SELECT * FROM chats WHERE phone=? AND channel=? AND provider=?',phone,channel,provider);const now=this.now();if(!chat){const id=randomUUID();this.store.run('INSERT INTO chats(id,phone,name,channel,provider,updated,last_inbound) VALUES(?,?,?,?,?,?,?)',id,phone,name||phone.replace(/@.*$/,''),channel,provider,now,now);chat=this.store.chat(id);}
   this.store.run('UPDATE chats SET unread=unread+1,last_inbound=? WHERE id=?',now,chat.id);this.store.addMessage({chatId:chat.id,providerId,direction:'in',body:body.trim()});
   const menuChoice=chat.followup_menu&&/^\s*[123][.!?]?\s*$/.test(body)?followupActions[Number(body.trim().replace(/[.!?]$/,''))-1].command:body;
   this.store.cancelFollowups(chat.id);
   const quotedOptions=JSON.parse(chat.quoted_options||'[]');
   const analysis=classifyMessage(menuChoice,{options:quotedOptions,pendingMeasure:chat.pending_measure,pendingSelection:chat.pending_selection});
   const type=forceHuman?'human':analysis.type;
+  let introductionSent=false;
+  const respond=async(text,actions=[])=>{
+   const shouldIntroduce=!introductionSent&&chat.mode==='auto'&&this.store.settings().agentEnabled&&(chat.introduced_at===null||now-chat.introduced_at>=86400000);
+   if(shouldIntroduce){
+    const claim=this.store.run('UPDATE chats SET introduced_at=? WHERE id=? AND (introduced_at IS NULL OR introduced_at<=?)',now,chat.id,now-86400000);
+    if(claim.changes){text=type==='greeting'?introduction:introduction+'\n\n'+text;if(type==='greeting')actions=[];introductionSent=true;}
+   }
+   return this.reply(chat,text,actions);
+  };
   if(type==='end_conversation'){
-   this.store.run("UPDATE chats SET closed_at=?,query=NULL,shown='[]',quoted_options='[]',pending_measure=NULL,pending_selection=NULL WHERE id=?",now,chat.id);this.store.changed();
-   if(!chat.closed_at&&chat.mode==='auto'&&this.store.settings().agentEnabled)await this.reply(chat,'Conversa encerrada. Quando precisar de outra cotação, é só mandar uma nova mensagem. Obrigado!',[]);
+   this.store.run("UPDATE chats SET closed_at=?,query=NULL,shown='[]',quoted_options='[]',batch_queries='[]',pending_item_index=NULL,pending_measure=NULL,pending_selection=NULL WHERE id=?",now,chat.id);this.store.changed();
+   if(!chat.closed_at&&chat.mode==='auto'&&this.store.settings().agentEnabled)await respond('Conversa encerrada. Quando precisar de outra cotação, é só mandar uma nova mensagem. Obrigado!',[]);
    return{chatId:chat.id,closed:true,intent:type};
   }
   if(chat.closed_at)this.store.run('UPDATE chats SET closed_at=NULL WHERE id=?',chat.id);
@@ -99,13 +138,13 @@ export class Agent {
    this.store.run("UPDATE chats SET mode='manual',pause_until=NULL,needs_human=1,handoff_reason=?,purchase_summary=?,pending_selection=NULL WHERE id=?",purchase?'purchase':chat.handoff_reason||'human',summary||null,chat.id);this.store.changed();
    if(!already&&chat.mode!=='manual'&&this.store.settings().agentEnabled){
     const reply=purchase?`Entendi que você quer fechar uma compra.${selected?`\nInteresse na opção ${analysis.selectionIndex+1}: *${selected.brand}* · ${selected.description}.`:''}\nAvisei nossa equipe para confirmar os itens, as medidas, a disponibilidade e as condições de pagamento com você. O pedido ainda não está confirmado e o estoque não foi reservado.`:'Claro! Avisei um atendente. A partir de agora, esta conversa fica com a nossa equipe. Assim que possível, alguém responde por aqui.';
-    await this.reply(chat,reply,[]);
+    await respond(reply,[]);
    }
    return{chatId:chat.id,handoff:true,intent:type};
   }
   if(chat.mode==='manual'||!this.store.settings().agentEnabled)return{chatId:chat.id,paused:true};let response;
   if(type==='add_items'){
-   this.store.run("UPDATE chats SET query=NULL,shown='[]',quoted_options='[]',pending_measure=NULL,pending_selection=NULL WHERE id=?",chat.id);
+   this.store.run("UPDATE chats SET query=NULL,shown='[]',quoted_options='[]',batch_queries='[]',pending_item_index=NULL,pending_measure=NULL,pending_selection=NULL WHERE id=?",chat.id);
    response={body:'Claro! Qual correia você quer adicionar? Informe o perfil, a referência e as medidas do próximo item.',actions:[actionHuman]};
   }
   else if(type==='clarify'){
@@ -113,27 +152,29 @@ export class Agent {
    this.store.run('UPDATE chats SET pending_selection=? WHERE id=?',valid?analysis.selectionIndex:null,chat.id);
    response={body:analysis.selectionIndex!==null&&!valid?'Essa opção não está na última cotação. Informe a referência da correia ou escolha uma das opções que acabei de mostrar.':`Você quer apenas cotar ou consultar mais detalhes${valid?` da opção ${analysis.selectionIndex+1} (${valid.brand})`:''}, ou já quer fechar o pedido? Responda *COTAR* ou *FECHAR PEDIDO*.`,actions:[actionHuman]};
   }
-  else if(type==='greeting')response={body:`Olá! Bem-vindo à ${this.store.settings().businessName}. 👋\nMe diga o produto, modelo ou medida que você procura. Vou consultar o estoque e te mostrar até 5 opções de marcas e valores por vez.`,actions:[actionHuman]};
+  else if(type==='greeting')response={body:'Me diga o perfil, a referência e as medidas das correias que você quer cotar. Vou consultar as marcas e os valores em estoque.',actions:[actionHuman]};
   else if(type==='thanks')response={body:'Por nada! Se precisar de outra cotação, é só me dizer o produto ou a medida. 😊',actions:[actionHuman]};
   else{const pricing=this.store.settings();
-   if(channel==='whatsapp'&&pricing.priceMode==='unconfirmed'){this.store.run("UPDATE chats SET mode='manual',pause_until=NULL,needs_human=1 WHERE id=?",chat.id);await this.reply(chat,'Vou chamar um atendente para confirmar os valores e preparar sua cotação.',[]);return{chatId:chat.id,handoff:true};}
+   if(channel==='whatsapp'&&pricing.priceMode==='unconfirmed'){this.store.run("UPDATE chats SET mode='manual',pause_until=NULL,needs_human=1 WHERE id=?",chat.id);await respond('Vou chamar um atendente para confirmar os valores e preparar sua cotação.',[]);return{chatId:chat.id,handoff:true};}
    const baseProducts=channel==='simulator'&&!this.store.get('SELECT id FROM products LIMIT 1')?demoProducts:this.store.all('SELECT * FROM products');const products=baseProducts.map(p=>({...p,price:p.price===null?null:Math.round(p.price*(1+(pricing.priceMode==='cost'?pricing.markupPercent||0:0)/100)*100)/100}));let detail=quoteSearchText(body);if(chat.pending_measure&&/^\s*\d+(?:[.,]\d+)?\s*[.!?]?\s*$/.test(body)){const units={ribs:'frisos',mm:'mm',meters:'metros',fixedWidth:'mm'};if(units[chat.pending_measure])detail=body.replace(/[.!?]$/,'')+' '+units[chat.pending_measure];}let query=type==='more'?chat.query:detail;
    const selectedIndex=analysis.selectionIndex??(type==='quote'&&!/\d/.test(parseBeltRequest(detail).reference)?chat.pending_selection:null);
    const selected=type==='quote'&&selectedIndex!==null?quotedOptions[selectedIndex]:null;
-   if(type==='quote'&&chat.query){
+   if(type==='quote'&&chat.query&&splitBeltRequests(detail).length===1){
     const request=parseBeltRequest(detail);
     const hasDetails=request.ribs!==null||request.mm!==null||request.meters!==null||request.hasPieces||request.budget!==null;
     const hasReference=meaningful(request.reference).some(word=>!['correia','industrial'].includes(word));
-    query=hasDetails||hasReference?mergeBeltRequest(chat.query,detail,[...new Set(products.map(p=>p.brand))]):chat.query;
+    const batch=JSON.parse(chat.batch_queries||'[]');
+    if(batch.length>1&&chat.pending_item_index!==null&&!hasReference){batch[chat.pending_item_index]=mergeBeltRequest(batch[chat.pending_item_index],detail,[...new Set(products.map(p=>p.brand))]);query=batch.join('\n');}
+    else{const base=selected?.itemQuery||chat.query;query=hasDetails||hasReference?mergeBeltRequest(base,detail,[...new Set(products.map(p=>p.brand))]):base;}
    }
    if(type==='quote'&&analysis.selectionIndex!==null&&!selected){response={body:'Essa opção não está na última cotação. Confirme a referência ou escolha uma das opções disponíveis.',actions:[actionHuman]};}
    else if(selected&&!products.some(p=>p.id===selected.id))response={body:'O estoque mudou desde essa cotação. Vou chamar um atendente para conferir a opção escolhida e o preço atual.',actions:[],needsHuman:true};
    else if(type==='more'&&!query)response={body:'Qual produto, modelo ou medida você quer cotar? Assim eu encontro as opções certas para você.',actions:[actionHuman]};
    else if(channel==='whatsapp'&&!products.length){response={body:'Nosso estoque está sendo atualizado. Vou chamar um atendente para confirmar os preços e a disponibilidade para você.',actions:[]};this.store.run("UPDATE chats SET mode='manual',pause_until=NULL,needs_human=1 WHERE id=?",chat.id);}
-   else{response=quoteReply(selected?products.filter(p=>p.id===selected.id):products,query,type==='more'?JSON.parse(chat.shown||'[]'):[],{mmDimension:'width',openBeltPriceBasis:pricing.openBeltPriceBasis||'unconfirmed'});const shown=type==='more'?[...JSON.parse(chat.shown||'[]'),...response.ids]:response.ids;this.store.run('UPDATE chats SET query=?,shown=?,pending_measure=?,quoted_options=?,pending_selection=NULL WHERE id=?',query,JSON.stringify(shown),response.awaiting||null,JSON.stringify(response.quotedOptions||[]),chat.id);}
+   else{response=quoteReply(selected?products.filter(p=>p.id===selected.id):products,query,type==='more'?JSON.parse(chat.shown||'[]'):[],{mmDimension:'width',openBeltPriceBasis:pricing.openBeltPriceBasis||'unconfirmed'});const shown=type==='more'?[...JSON.parse(chat.shown||'[]'),...response.ids]:response.ids;this.store.run('UPDATE chats SET query=?,shown=?,pending_measure=?,quoted_options=?,batch_queries=?,pending_item_index=?,pending_selection=NULL WHERE id=?',query,JSON.stringify(shown),response.awaiting||null,JSON.stringify(response.quotedOptions||[]),JSON.stringify(response.batchQueries||[]),response.pendingItemIndex??null,chat.id);}
   }
   if(response.needsHuman)this.store.run("UPDATE chats SET mode='manual',pause_until=NULL,needs_human=1 WHERE id=?",chat.id);
-  if(this.store.chat(chat.id).mode==='manual'&&!response.needsHuman&&!response?.body?.includes('estoque está sendo atualizado'))return{chatId:chat.id,paused:true};const reply=await this.reply(chat,response.body,response.actions);if(reply.status==='sent'&&response.ids?.length&&analysis.allowFollowup)this.followups.schedule(chat.id,reply.id);return{chatId:chat.id,intent:type};
+  if(this.store.chat(chat.id).mode==='manual'&&!response.needsHuman&&!response?.body?.includes('estoque está sendo atualizado'))return{chatId:chat.id,paused:true};const reply=await respond(response.body,response.actions);if(reply.status==='sent'&&response.ids?.length&&!response.awaiting&&analysis.allowFollowup)this.followups.schedule(chat.id,reply.id);return{chatId:chat.id,intent:type};
  }
  async reply(chat,body,actions=[],direction='bot'){
   const message=this.store.addMessage({chatId:chat.id,direction,body,actions,status:'pending'});
