@@ -2,7 +2,7 @@ import {randomUUID} from 'node:crypto';
 import {normalize,demoProducts} from './catalog.js';
 import {parseBeltRequest,productBeltSpec,calculateBeltQuote,formatBeltCalculation,mergeBeltRequest} from './belts.js';
 import {classifyMessage,quoteSearchText} from './intents.js';
-import {Followups,followupActions} from './followups.js';
+import {Followups} from './followups.js';
 import {splitBeltRequests} from './requests.js';
 import {helpActions,helpChoice,deliveryMethod,deliveryLabels,pickupQuestion,isPickupDetails,pickupQuoteText} from './conversation.js';
 export const introduction='Olá, sou o agente ROBINHO, vou te ajudar no atendimento nesse momento';
@@ -101,24 +101,27 @@ export class Agent {
  constructor(store,send,options={}){this.store=store;this.send=send;this.now=options.now||Date.now;this.queues=new Map();this.followups=new Followups(this,options);}
  enqueue(key,fn){const next=(this.queues.get(key)||Promise.resolve()).catch(()=>{}).then(fn);this.queues.set(key,next);next.finally(()=>{if(this.queues.get(key)===next)this.queues.delete(key);}).catch(()=>{});return next;}
  receive(input){
+  input={...input,channel:input.channel||'whatsapp',provider:input.provider||'qr'};
+  if(input.channel==='whatsapp'&&!/^\d+@(c\.us|lid|s\.whatsapp\.net)$/.test(input.phone)||input.channel==='simulator'&&!/^demo-[a-zA-Z0-9-]{1,50}$/.test(input.phone)||!['whatsapp','simulator'].includes(input.channel))return Promise.resolve({ignored:true});
   // Cancel a pending reminder as soon as a valid inbound message enters the queue.
   if(input.body?.trim()&&!input.isGroup&&!input.fromMe&&!input.isStatus&&!/@g\.us$|@broadcast$|@newsletter$/.test(input.phone)&&!(input.providerId&&this.store.get('SELECT id FROM messages WHERE provider_id=?',input.providerId))){
    const chat=this.store.get('SELECT id FROM chats WHERE phone=? AND channel=? AND provider=?',input.phone,input.channel||'whatsapp',input.provider||'qr');
    if(chat)this.store.cancelFollowups(chat.id,{keepMenu:true,keepDelivery:true});
   }
-  return this.enqueue(`${input.provider||'qr'}:${input.channel}:${input.phone}`,()=>this.process(input));
+  return this.enqueue(`${input.provider||'qr'}:${input.channel}:${input.phone}`,async()=>{const result=await this.process(input);if(result.chatId&&!result.closed&&!result.duplicate&&!result.ignored)this.followups.schedule(result.chatId);return result;});
  }
  async process({phone,name,body,providerId,channel='whatsapp',provider='qr',isGroup=false,fromMe=false,isStatus=false,forceHuman=false}){
   if(isGroup||fromMe||isStatus||/@g\.us$|@broadcast$|@newsletter$/.test(phone))return{ignored:true};if(!body?.trim())return{ignored:true};if(providerId&&this.store.get('SELECT id FROM messages WHERE provider_id=?',providerId))return{duplicate:true};this.store.resumeExpired();
   let chat=this.store.get('SELECT * FROM chats WHERE phone=? AND channel=? AND provider=?',phone,channel,provider);const now=this.now();if(!chat){const id=randomUUID();this.store.run('INSERT INTO chats(id,phone,name,channel,provider,updated,last_inbound) VALUES(?,?,?,?,?,?,?)',id,phone,name||phone.replace(/@.*$/,''),channel,provider,now,now);chat=this.store.chat(id);}
   this.store.run('UPDATE chats SET unread=unread+1,last_inbound=? WHERE id=?',now,chat.id);const inbound=this.store.addMessage({chatId:chat.id,providerId,direction:'in',body:body.trim()});
-  const menuChoice=chat.followup_menu&&/^\s*[123][.!?]?\s*$/.test(body)?followupActions[Number(body.trim().replace(/[.!?]$/,''))-1].command:body;
+  this.store.run('UPDATE messages SET inbound_verified=1 WHERE id=?',inbound.id);
   this.store.cancelFollowups(chat.id,{keepDelivery:true});
   const quotedOptions=JSON.parse(chat.quoted_options||'[]');
-  const analysis=classifyMessage(menuChoice,{options:quotedOptions,pendingMeasure:chat.pending_measure,pendingSelection:chat.pending_selection});
+  const analysis=classifyMessage(body,{options:quotedOptions,pendingMeasure:chat.pending_measure,pendingSelection:chat.pending_selection});
   const type=forceHuman?'human':analysis.type;
   const help=chat.help_state==='asked'?helpChoice(body):null;
   if(chat.closed_at&&(type==='thanks'||helpChoice(body)!==null||/^[123][.!? ]*$/.test(body)))return{chatId:chat.id,closed:true,intent:type};
+  if(!chat.service_origin_id||chat.closed_at)this.store.run('UPDATE chats SET service_origin_id=? WHERE id=?',inbound.id,chat.id);
   function clearQuote(store,id){store.run("UPDATE chats SET query=NULL,shown='[]',quoted_options='[]',batch_queries='[]',pending_item_index=NULL,pending_measure=NULL,pending_selection=NULL WHERE id=?",id);}
   let introductionSent=false;
   const respond=async(text,actions=[])=>{
@@ -127,7 +130,7 @@ export class Agent {
     const claim=this.store.run('UPDATE chats SET introduced_at=? WHERE id=? AND (introduced_at IS NULL OR introduced_at<=?)',now,chat.id,now-86400000);
     if(claim.changes){text=type==='greeting'?introduction:introduction+'\n\n'+text;if(type==='greeting')actions=[];introductionSent=true;}
    }
-   return this.reply(chat,text,actions);
+   return this.reply(chat,text,actions,'bot',{allowClosed:type==='end_conversation'});
   };
   if(help==='no'){
    this.store.cancelFollowups(chat.id);clearQuote(this.store,chat.id);this.store.run("UPDATE chats SET closed_at=?,help_state='closed' WHERE id=?",now,chat.id);this.store.changed();return{chatId:chat.id,closed:true,intent:'end_conversation'};
@@ -224,10 +227,14 @@ export class Agent {
   }
   const pickupPrompt=quoteWithPickup&&!response.needsHuman?claimPickupQuestion():'';if(pickupPrompt)response.body+='\n\n'+pickupPrompt;
   if(response.needsHuman)this.store.run("UPDATE chats SET mode='manual',pause_until=NULL,needs_human=1 WHERE id=?",chat.id);
-  if(this.store.chat(chat.id).mode==='manual'&&!response.needsHuman&&!response?.body?.includes('estoque está sendo atualizado'))return{chatId:chat.id,paused:true};const reply=await respond(response.body,response.actions);if(reply.status==='sent'&&response.ids?.length&&!response.awaiting){this.store.run('UPDATE chats SET last_quote_message_id=?,help_state=NULL WHERE id=?',reply.id,chat.id);if(analysis.allowFollowup&&!pickupPrompt)this.followups.schedule(chat.id,reply.id);}return{chatId:chat.id,intent:type};
+  if(this.store.chat(chat.id).mode==='manual'&&!response.needsHuman&&!response?.body?.includes('estoque está sendo atualizado'))return{chatId:chat.id,paused:true};const reply=await respond(response.body,response.actions);if(reply.status==='sent'&&response.ids?.length&&!response.awaiting){this.store.run('UPDATE chats SET last_quote_message_id=?,help_state=NULL WHERE id=?',reply.id,chat.id);}return{chatId:chat.id,intent:type};
  }
- async reply(chat,body,actions=[],direction='bot',{author=null,transportBody=body}={}){
+ async reply(chat,body,actions=[],direction='bot',{author=null,transportBody=body,allowClosed=false}={}){
+  if(direction==='bot'){
+   const live=this.store.chat(chat.id),origin=live?.service_origin_id&&this.store.get("SELECT id FROM messages WHERE id=? AND chat_id=? AND direction='in' AND inbound_verified=1",live.service_origin_id,live.id);
+   if(!origin||live.phone!==chat.phone||live.channel!==chat.channel||live.provider!==chat.provider||live.closed_at&&!allowClosed)return{status:'blocked',error:'Sem mensagem recebida válida para autorizar resposta automática.'};
+  }
   const message=this.store.addMessage({chatId:chat.id,direction,body,actions,status:'pending',author,deliveryBody:direction==='owner'?transportBody:null});
-  try{const providerId=chat.channel==='simulator'?null:await this.send(chat,transportBody,actions);this.store.run("UPDATE messages SET status='sent',provider_id=? WHERE id=?",providerId||null,message.id);}catch(e){this.store.run("UPDATE messages SET status='failed',error=? WHERE id=?",String(e.message).slice(0,400),message.id);this.store.event('send_error','Uma mensagem não foi enviada. Verifique a conexão e o chat.');}this.store.changed();return this.store.get('SELECT * FROM messages WHERE id=?',message.id);
+  try{const providerId=chat.channel==='simulator'?null:await this.send(chat,transportBody,actions);this.store.run("UPDATE messages SET status='sent',provider_id=?,sent_at=? WHERE id=?",providerId||null,this.now(),message.id);}catch(e){this.store.run("UPDATE messages SET status='failed',error=? WHERE id=?",String(e.message).slice(0,400),message.id);this.store.event('send_error','Uma mensagem não foi enviada. Verifique a conexão e o chat.');}this.store.changed();return this.store.get('SELECT * FROM messages WHERE id=?',message.id);
  }
 }

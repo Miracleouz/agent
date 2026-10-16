@@ -9,7 +9,7 @@ import {WhatsApp} from '../server/whatsapp.js';
 import {Agent} from '../server/agent.js';
 import {Store} from '../server/db.js';
 import {demoProducts,replaceCatalog} from '../server/catalog.js';
-import {followupActions} from '../server/followups.js';
+import {inactivityMessage} from '../server/followups.js';
 import {helpActions,deliveryActions} from '../server/conversation.js';
 
 class FakeClient extends EventEmitter {
@@ -93,13 +93,8 @@ test('disconnect and reconnect discard a pending reminder before its deadline',a
  await whatsapp.connect();clients.at(-1).emit('ready');await agent.followups.check();
  assert.equal(client.sent.length,1);assert.equal(clients.at(-1).sent.length,0);
 });
-test('QR transport sends exactly three idle choices in one message with numeric replies',async t=>{
- const{whatsapp,client}=await fixture(t);client.emit('ready');
- await whatsapp.send({phone:'5511@c.us'},'Como você prefere continuar?',followupActions);
- assert.equal(client.sent.length,1);const body=client.sent[0].body;
- for(const action of followupActions)assert.equal(body.split(action.label).length-1,1);
- assert.match(body,/1 — Quer fechar o pedido\?/);assert.match(body,/2 — Adicionar mais itens/);assert.match(body,/3 — Encerrar conversa/);
- assert.doesNotMatch(body,/ATENDENTE/);assert.equal(whatsapp.snapshot().nativeButtons,false);
+test('QR transport sends the inactivity closure as one plain message without menu or sales prompts',async t=>{
+ const{whatsapp,client}=await fixture(t);client.emit('ready');await whatsapp.send({phone:'5511@c.us'},inactivityMessage,[]);assert.equal(client.sent.length,1);assert.equal(client.sent[0].body,inactivityMessage);assert.doesNotMatch(client.sent[0].body,/ATENDENTE|Quer fechar|Adicionar mais|1 —/);
 });
 for(const [kind,actions] of [['gratitude',helpActions],['delivery',deliveryActions]])test(`QR transport preserves the ${kind} options as a numbered text menu`,async t=>{
  const{whatsapp,client}=await fixture(t);client.emit('ready');await whatsapp.send({phone:'5511@c.us'},'Pergunta de teste',actions);assert.equal(client.sent.length,1);

@@ -7,6 +7,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {Store} from '../server/db.js';
 import {Agent,introduction} from '../server/agent.js';
+import {inactivityMessage} from '../server/followups.js';
 import {WhatsApp} from '../server/whatsapp.js';
 import {replaceCatalog} from '../server/catalog.js';
 import {industrialStock} from './fixtures/industrial-stock.js';
@@ -56,8 +57,8 @@ for(const [openerIndex,opener] of openers.entries())for(const [quoteIndex,quote]
   if(quoteIndex<9){assert.match(client.sent[1].body,/Cotação dos 3 itens/);assert.equal(JSON.parse(store.chats()[0].quoted_options).length,15);}
   else{assert.match(client.sent[1].body,/peça pronta/);assert.match(client.sent[1].body,/por friso × 4/);}
   assert.equal(client.sent.filter(message=>message.body.includes(introduction)).length,1);
-  if(index%2===0){advance(5*minute-1);await agent.followups.check();emit('obrigado',phone);await drain();const count=client.sent.length;advance(6*minute);await agent.followups.check();assert.equal(client.sent.length,count);}
-  else{advance(5*minute);await agent.followups.check();assert.equal(client.sent.length,3);assert.match(client.sent[2].body,/Quer fechar o pedido/);advance(minute);await agent.followups.check();assert.equal(client.sent.length,3);emit('3',phone);await drain();assert(store.chats()[0].closed_at);}
+  if(index%2===0){advance(5*minute-1);await agent.followups.check();emit('obrigado',phone);await drain();const count=client.sent.length;advance(5*minute-1);await agent.followups.check();assert.equal(client.sent.length,count);advance(1);await agent.followups.check();assert.equal(client.sent.length,count+1);assert.equal(client.sent.at(-1).body,inactivityMessage);}
+  else{advance(5*minute);await agent.followups.check();assert.equal(client.sent.length,3);assert.equal(client.sent[2].body,inactivityMessage);advance(minute);await agent.followups.check();assert.equal(client.sent.length,3);emit('3',phone);await drain();assert(store.chats()[0].closed_at);}
   const count=client.sent.length;advance(7*day);for(let tick=0;tick<10;tick++)await agent.followups.check();assert.equal(client.sent.length,count);
   assert(client.sent.every(message=>message.phone===phone));assert.equal(store.get('SELECT count(*) n FROM chats WHERE phone=?',stranger).n,0);
  });

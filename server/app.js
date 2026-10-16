@@ -42,7 +42,7 @@ export function createApp({store,whatsapp,production=false,appUrl=process.env.AP
   req.on('close',()=>{clearInterval(keepalive);store.off('change',onChange);});
  });
  app.patch('/api/settings',adminOnly,(req,res)=>{
-  const input=z.object({businessName:z.string().trim().min(2).max(80).optional(),pauseMinutes:z.number().int().min(1).max(1440).optional(),agentEnabled:z.boolean().optional(),signHumanMessages:z.boolean().optional(),followupMinutes:z.union([z.literal(0),z.number().int().min(5).max(60)]).optional(),syncMinutes:z.union([z.literal(0),z.number().int().min(5).max(1440)]).optional(),sheetUrl:z.string().max(500).optional(),priceMode:z.enum(['unconfirmed','sale','cost']).optional(),markupPercent:z.number().min(0).max(1000).optional(),mmDimension:z.literal('width').optional(),openBeltPriceBasis:z.enum(['unconfirmed','per_meter_mm','per_meter_full_width']).optional()}).strict().parse(req.body);
+  const input=z.object({businessName:z.string().trim().min(2).max(80).optional(),pauseMinutes:z.number().int().min(1).max(1440).optional(),agentEnabled:z.boolean().optional(),signHumanMessages:z.boolean().optional(),followupMinutes:z.literal(5).optional(),syncMinutes:z.union([z.literal(0),z.number().int().min(5).max(1440)]).optional(),sheetUrl:z.string().max(500).optional(),priceMode:z.enum(['unconfirmed','sale','cost']).optional(),markupPercent:z.number().min(0).max(1000).optional(),mmDimension:z.literal('width').optional(),openBeltPriceBasis:z.enum(['unconfirmed','per_meter_mm','per_meter_full_width']).optional()}).strict().parse(req.body);
   if(input.sheetUrl)sheetExport(input.sheetUrl);res.json(store.setSettings(input));
  });
  function getChat(id){const chat=store.chat(id);if(!chat)throw fail('Conversa não encontrada.',404);return chat;}

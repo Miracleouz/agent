@@ -21,7 +21,7 @@ for(const text of ['AT10 33000 25mm','AT10 33.000 25 mm','AT10 33000 x 25mm','AT
 test('shorthand request keeps its length when the client answers only the requested width',async t=>{
  const store=new Store(':memory:');t.after(()=>store.close());replaceCatalog(store,[product],'test');const sent=[];const agent=new Agent(store,async(chat,body)=>{sent.push(body);return null;});
  const input={phone:'demo-open',channel:'simulator',provider:'demo'};const first=await agent.receive({...input,body:'valor AT10 33000'});
- assert.equal(store.chat(first.chatId).pending_measure,'fixedWidth');assert.equal(store.chat(first.chatId).followup_due_at,null);await agent.receive({...input,body:'25'});
+ assert.equal(store.chat(first.chatId).pending_measure,'fixedWidth');assert(store.chat(first.chatId).followup_due_at);await agent.receive({...input,body:'25'});
  assert.match(store.messages(first.chatId).at(-1).body,/1\.881,00 por corte/);assert.equal(store.chat(first.chatId).mode,'auto');
  assert(store.chat(first.chatId).followup_due_at);
 });

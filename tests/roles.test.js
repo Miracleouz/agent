@@ -18,7 +18,7 @@ async function fixture(t){
  await post(admin,'/api/auth/setup',{name:'Admin Original',email:'admin@example.test',password:secret}).expect(201);
  const login=async email=>{const client=request.agent(app);await post(client,'/api/auth/login',{email,password:secret}).expect(200);return client;};
  const create=async(name,role='comercial')=>{const email=name.toLowerCase()+'@example.test',result=await post(admin,'/api/users',{name,email,password:secret,role}).expect(201);return{...result.body,client:await login(email)};};
- const chat=async(body='oi',phone=randomUUID())=>app.locals.agent.receive({body,phone:phone+'@c.us',channel:'whatsapp',provider:'qr',providerId:randomUUID()});
+ const chat=async(body='oi',phone=String(BigInt('0x'+randomUUID().replaceAll('-',''))).slice(0,13))=>app.locals.agent.receive({body,phone:phone+'@c.us',channel:'whatsapp',provider:'qr',providerId:randomUUID()});
  return{store,app,admin,create,login,chat,sent};
 }
 test('Admin and Comercial are the only assignable roles, with multiple administrators allowed',async t=>{

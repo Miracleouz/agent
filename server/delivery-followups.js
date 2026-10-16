@@ -6,7 +6,7 @@ export class DeliveryFollowups{
  eligible(chat){return chat?.delivery_allowed===1&&chat.purchase_requested===1&&chat.order_state==='interest'&&chat.handoff_reason==='purchase'&&chat.mode==='manual'&&!chat.assigned_user_id&&!chat.delivery_method&&!chat.closed_at&&!chat.human_requested;}
  schedule(id){
   const chat=this.store.chat(id),now=this.now();if(this.agent.followups.closed||!this.eligible(chat)||!this.store.settings().agentEnabled||chat.delivery_last_attempt!==null&&now-chat.delivery_last_attempt<cooldown)return;
-  const origin=this.store.get("SELECT id FROM messages WHERE id=? AND chat_id=? AND direction='in'",chat.delivery_origin_id,id),latest=this.store.get('SELECT id FROM messages WHERE chat_id=? ORDER BY created DESC,rowid DESC LIMIT 1',id);
+  const origin=this.store.get("SELECT id FROM messages WHERE id=? AND chat_id=? AND direction='in' AND inbound_verified=1",chat.delivery_origin_id,id),latest=this.store.get('SELECT id FROM messages WHERE chat_id=? ORDER BY created DESC,rowid DESC LIMIT 1',id);
   if(!origin||!latest)return;
   this.store.run("UPDATE chats SET delivery_due_at=?,delivery_anchor_id=?,delivery_state='scheduled' WHERE id=?",now+delay,latest.id,id);this.store.changed();
  }
@@ -18,7 +18,7 @@ export class DeliveryFollowups{
  }
  async deliver(id){
   const chat=this.store.chat(id),now=this.now();if(!chat||chat.delivery_state!=='scheduled'||chat.delivery_due_at>now)return false;
-  const latest=this.store.get('SELECT id FROM messages WHERE chat_id=? ORDER BY created DESC,rowid DESC LIMIT 1',id),origin=this.store.get("SELECT id FROM messages WHERE id=? AND chat_id=? AND direction='in'",chat.delivery_origin_id,id);
+  const latest=this.store.get('SELECT id FROM messages WHERE chat_id=? ORDER BY created DESC,rowid DESC LIMIT 1',id),origin=this.store.get("SELECT id FROM messages WHERE id=? AND chat_id=? AND direction='in' AND inbound_verified=1",chat.delivery_origin_id,id);
   if(!this.eligible(chat)||!this.store.settings().agentEnabled||!chat.delivery_due_at||now-chat.delivery_due_at>maxDelay||chat.delivery_last_attempt!==null&&now-chat.delivery_last_attempt<cooldown||chat.channel!=='simulator'&&!privatePhone(chat.phone)||!this.canSend(chat)||!origin||latest?.id!==chat.delivery_anchor_id){this.cancel(id);return false;}
   const claim=this.store.run("UPDATE chats SET delivery_state='sending',delivery_due_at=NULL,delivery_last_attempt=?,delivery_menu=1 WHERE id=? AND delivery_state='scheduled' AND delivery_anchor_id=?",now,id,latest.id);if(!claim.changes)return false;
   const result=await this.agent.reply(chat,'Como você prefere receber o pedido?',deliveryActions);

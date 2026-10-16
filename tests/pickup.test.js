@@ -32,7 +32,7 @@ for(const context of ['primeiro contato','após cotação','junto com compra','d
   await receive('pode separar');advance(context==='após menu de envio'?3*minute:minute);await agent.followups.check();
  }
  const before=sent.length,result=await receive(context==='junto com compra'?'pode separar, '+phrase:phrase),chat=store.chat(result.chatId);
- assert.equal(chat.delivery_method,'retira');assert.equal(sent.length,before+1);assert(sent.at(-1).body.endsWith(pickupQuestion));assert.equal(chat.pickup_pending_details,1);assert.equal(chat.delivery_due_at,null);assert.equal(chat.followup_due_at,null);
+ assert.equal(chat.delivery_method,'retira');assert.equal(sent.length,before+1);assert(sent.at(-1).body.endsWith(pickupQuestion));assert.equal(chat.pickup_pending_details,1);assert.equal(chat.delivery_due_at,null);if(['primeiro contato','após cotação'].includes(context))assert(chat.followup_due_at);else assert.equal(chat.followup_due_at,null);
  if(context==='primeiro contato'){assert(sent.at(-1).body.startsWith(introduction));assert.equal(chat.purchase_requested,0);}
  if(context==='após cotação'){assert.equal(sent.at(-1).body,pickupQuestion);assert.equal(chat.purchase_requested,0);}
  if(context==='junto com compra'){assert.equal(chat.purchase_requested,1);assert.equal(chat.order_state,'interest');}
@@ -40,7 +40,7 @@ for(const context of ['primeiro contato','após cotação','junto com compra','d
  await receive(phrase);await receive('vou mandar retirar');await receive('ok obgd');
  await receive('João da empresa Exemplo Industrial');await receive('Empresa: Exemplo Industrial Ltda');
  assert.equal(sent.length,count);assert.match(store.chat(result.chatId).pickup_details,/João da empresa Exemplo Industrial/);assert.match(store.chat(result.chatId).pickup_details,/Empresa: Exemplo Industrial Ltda/);
- for(let i=0;i<30;i++){advance(minute);await agent.followups.check();}assert.equal(sent.length,count);
+ for(let i=0;i<30;i++){advance(minute);await agent.followups.check();}assert.equal(sent.length,count+(['primeiro contato','após cotação'].includes(context)?1:0));
 });
 const otherDelivery=[
  ['pode mandar por motoboy','consultar_outros'],['manda por uber','consultar_outros'],['pode enviar por entregador','consultar_outros'],
@@ -106,7 +106,7 @@ test('reinício preserva a pergunta feita e os dados; não gera primeiro contato
  const result=await receive('vou mandar o motorista');await receive('João da empresa Teste');agent.followups.close();store.close();store=new Store(file);agent=new Agent(store,send);await agent.followups.check();await receive('vou mandar o uber');assert.equal(sent.length,1);assert.equal(store.chat(result.chatId).pickup_details,'João da empresa Teste');assert.equal(store.chat(result.chatId).pickup_pending_details,1);
 });
 for(const body of ['cotar A42, vou retirar','quanto custa A42? vou retirar','correia A42 vou mandar o motorista','vou retirar correia A42','cotar A42; vou mandar o uber','vou mandar um moto-boy buscar aí, cotar A42'])test(`cotação e retirada na mesma mensagem: ${body}`,async t=>{
- const{store,sent,receive}=fixture(t);const result=await receive(body);assert.equal(sent.length,1);assert.match(sent[0].body,/R\$/);assert(sent[0].body.endsWith(pickupQuestion));assert.equal(store.chat(result.chatId).delivery_method,'retira');assert.equal(store.chat(result.chatId).pickup_pending_details,1);assert.equal(store.chat(result.chatId).followup_due_at,null);
+ const{store,sent,receive}=fixture(t);const result=await receive(body);assert.equal(sent.length,1);assert.match(sent[0].body,/R\$/);assert(sent[0].body.endsWith(pickupQuestion));assert.equal(store.chat(result.chatId).delivery_method,'retira');assert.equal(store.chat(result.chatId).pickup_pending_details,1);assert(store.chat(result.chatId).followup_due_at);
 });
 for(const body of ['sim','não','ok','claro','não obrigado'])test(`confirmação curta depois da pergunta de retirada fica em silêncio: ${body}`,async t=>{
  const{store,sent,receive}=fixture(t);const result=await receive('A42');await receive('vou retirar');const count=sent.length;await receive(body);assert.equal(sent.length,count);assert.equal(store.chat(result.chatId).pickup_details,null);

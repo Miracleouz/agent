@@ -125,6 +125,8 @@ Depois de cotar, agradecimentos como **ok,obgd** e **obrigado pelos valores** re
 
 A versão **1.8.0** reconhece o cliente enviando motorista, motoboy, Uber ou 99 para buscar e registra **RETIRA**. Também aceita `vou mandar retirar` e `vou retirar`. Pergunta **Para agilizar na hora da retirada informe nome de quem vai retirar e nome da empresa**, com uma tentativa por chat em 24 horas, sem insistência depois. Os textos recebidos aparecem em **Retirada · identificação** e no histórico. Pausas e atendimentos humanos são respeitados. A migração apenas acrescenta campos ao banco; atualizar não dispara mensagens antigas. Ao substituir os arquivos, preserve `.env` e os dados existentes. Recrie o serviço com `docker compose up -d --build` na mesma pasta da instalação e atualize o navegador com Ctrl+F5.
 
+A versão **1.9.0** substitui o menu antigo de cinco minutos por **encerramento por inatividade**: após cinco minutos sem resposta no atendimento automático, avisa o cliente uma vez e encerra. Uma nova mensagem válida reinicia o prazo; só uma nova solicitação do cliente pode reabrir a conversa depois de encerrada. O prazo é fixo e aparece em Configurações. Atendimentos assumidos ou encaminhados para pessoas continuam sob controle da equipe. A coleta de envio após três minutos do interesse de compra continua separada. Cadastro, histórico importado, QR e reinício não iniciam conversas nem disparam avisos antigos. A migração adiciona campos de verificação sem apagar estoque, usuários ou histórico; nenhuma mensagem antiga é marcada como nova.
+
 ## Cotações configuradas
 
 - **Abertas:** `(preço por metro da faixa inteira ÷ largura cadastrada em mm) × comprimento pedido em metros × largura pedida em mm`.

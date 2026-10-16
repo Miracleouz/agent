@@ -50,7 +50,7 @@ test('unavailable item is reported without omitting the other requested items or
 });
 test('missing ribs apply only to their item and preserve the complete request',async t=>{
  const{store,receive,sent}=fixture(t);replaceCatalog(store,industrialStock.filter(product=>!product.id.startsWith('pk-piece-')),'cut-only PK');const r=await receive('B72; PK650; A89');
- assert.equal(store.chat(r.chatId).pending_item_index,1);assert.equal(store.chat(r.chatId).pending_measure,'ribs');assert.equal(store.chat(r.chatId).followup_due_at,null);
+ assert.equal(store.chat(r.chatId).pending_item_index,1);assert.equal(store.chat(r.chatId).pending_measure,'ribs');assert(store.chat(r.chatId).followup_due_at);
  await receive('4');const chat=store.chat(r.chatId);
  assert.equal(chat.pending_measure,null);assert.equal(JSON.parse(chat.batch_queries).length,3);assert.match(sent.at(-1),/por friso × 4/);assert.match(sent.at(-1),/B72/);assert.match(sent.at(-1),/A89/);
 });

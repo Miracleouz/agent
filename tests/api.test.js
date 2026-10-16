@@ -24,12 +24,12 @@ test('owner receives purchase reason and chosen quote in the dashboard then clea
  assert.equal(chat.handoff_reason,'purchase');assert.equal(chat.needs_human,1);assert.match(chat.purchase_summary,/Opção 2/);
  await post(owner,`/api/chats/${chat.id}/resume`).expect(200);assert.equal(store.chat(chat.id).handoff_reason,null);
 });
-test('owner controls the idle delay and cannot enable sub-five-minute followups',async t=>{
+test('owner sees fixed five-minute inactivity and cannot restore the previous menu settings',async t=>{
  const{owner,store}=await fixture(t);assert.equal(store.settings().followupMinutes,5);
  await owner.patch('/api/settings').set('X-Cota-Request','1').send({followupMinutes:1}).expect(400);
- await owner.patch('/api/settings').set('X-Cota-Request','1').send({followupMinutes:10}).expect(200);assert.equal(store.settings().followupMinutes,10);
+ await owner.patch('/api/settings').set('X-Cota-Request','1').send({followupMinutes:10}).expect(400);assert.equal(store.settings().followupMinutes,5);
  await post(owner,'/api/simulator/message').send({body:'A42'}).expect(201);assert.equal(store.chats()[0].followup_state,'scheduled');
- await owner.patch('/api/settings').set('X-Cota-Request','1').send({followupMinutes:0}).expect(200);assert.equal(store.chats()[0].followup_due_at,null);
+ await owner.patch('/api/settings').set('X-Cota-Request','1').send({followupMinutes:0}).expect(400);assert.equal(store.settings().followupMinutes,5);
 });
 test('persisted sessions are hashed, password changes invalidate other sessions',async t=>{const{app,owner,store}=await fixture(t);const other=request.agent(app);await post(other,'/api/auth/login').send({email:'dono@example.test',password:'password-secure-123'}).expect(200);await post(owner,'/api/auth/password').send({current:'password-secure-123',password:'new-password-123'}).expect(200);await other.get('/api/bootstrap').expect(401);await owner.get('/api/bootstrap').expect(200);assert(!store.get('SELECT password FROM owner').password.includes('new-password-123'));});
 test('catalog pagination searches all rows and reports items without sale prices',async t=>{
