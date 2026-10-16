@@ -1,4 +1,4 @@
-# Atualizar para a versão 1.9.0 no Docker
+# Atualizar para a versão 1.10.0 no Docker
 
 Use a instalação que já está funcionando. O ZIP contém o código; estoque, usuários, conversas e sessão do WhatsApp permanecem no volume existente.
 
@@ -10,7 +10,7 @@ Use a instalação que já está funcionando. O ZIP contém o código; estoque, 
 docker compose stop cota
 ```
 
-4. Copie o conteúdo da pasta `cota-whatsapp-1.9.0` extraída para a pasta da instalação atual, substituindo os arquivos do código. O `compose.yaml`, o `Dockerfile`, `server` e `src` devem ficar diretamente na pasta atual, sem criar outra pasta dentro dela. Preserve seu `.env`, dados locais e eventuais ajustes próprios de porta, domínio ou volumes no `compose.yaml`.
+4. Copie o conteúdo da pasta `cota-whatsapp-1.10.0` extraída para a pasta da instalação atual, substituindo os arquivos do código. O `compose.yaml`, o `Dockerfile`, `server` e `src` devem ficar diretamente na pasta atual, sem criar outra pasta dentro dela. Preserve seu `.env`, dados locais e eventuais ajustes próprios de porta, domínio ou volumes no `compose.yaml`.
 5. Na mesma pasta e usando o mesmo projeto Compose da instalação anterior, execute:
 
 ```powershell
@@ -28,8 +28,10 @@ docker compose logs --tail=100 cota
 
 7. Abra o endereço que você já usa para acessar o painel e pressione **Ctrl+F5**. Na instalação local padrão, o endereço digitado no navegador é `localhost:3000`. Use **Testar agente** para conferir a atualização. Teste `vou mandar o motorista`: deve pedir nome de quem vai retirar e nome da empresa. Repetir a frase no mesmo chat em menos de 24 horas não deve repetir a pergunta.
 
+A nova aba **Contatos** permite cadastrar nome, WhatsApp e empresa e clicar em **Conversar**. Com o WhatsApp conectado, a conversa abre em atendimento manual e fica com o usuário que assumiu. A primeira mensagem só sai quando ele escrever e clicar em enviar; o bot não inicia contato sozinho. Apenas Admin exclui contatos, mantendo o histórico. O guia completo está em `INSTALAR.md`.
+
 Nesta versão, o atendimento automático envia um único aviso e encerra após cinco minutos sem resposta; o antigo menu de cinco minutos foi removido. Teste também `oi vim pelo site`, depois uma cotação e aguarde cinco minutos: deve aparecer o encerramento, sem repetição. Não é necessário informar credenciais do WhatsApp no simulador, que não envia a contatos reais.
 
 Não execute `docker compose down -v` nem exclua o volume `cota-data`. O nome real do volume costuma incluir o nome do projeto Compose. Mantenha a mesma instalação/projeto para preservar estoque, acessos, histórico e sessão. Caso a sessão de WhatsApp tenha expirado, gere um novo QR no painel.
 
-O pacote foi verificado com 1.462 testes automatizados, 12 testes de navegador e build de produção. A imagem Docker precisa ser construída no seu host pelo comando acima; não foi executado um build Docker neste ambiente.
+O pacote foi verificado com 1.812 testes automatizados, 14 testes de navegador e build de produção. A imagem Docker precisa ser construída no seu host pelo comando acima; não foi executado um build Docker neste ambiente.

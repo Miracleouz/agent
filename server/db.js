@@ -19,6 +19,9 @@ export class Store extends EventEmitter {
    CREATE TABLE IF NOT EXISTS messages(id TEXT PRIMARY KEY, chat_id TEXT NOT NULL REFERENCES chats(id), provider_id TEXT UNIQUE, direction TEXT NOT NULL, body TEXT NOT NULL, actions TEXT NOT NULL DEFAULT '[]', status TEXT NOT NULL, error TEXT, created INTEGER NOT NULL);
    CREATE INDEX IF NOT EXISTS messages_chat ON messages(chat_id,created);
    CREATE INDEX IF NOT EXISTS chats_updated ON chats(updated);
+   CREATE TABLE IF NOT EXISTS contacts(id TEXT PRIMARY KEY,name TEXT NOT NULL,phone TEXT NOT NULL UNIQUE,company TEXT NOT NULL DEFAULT '',created_by TEXT,created INTEGER NOT NULL,updated INTEGER NOT NULL);
+   CREATE INDEX IF NOT EXISTS contacts_name ON contacts(name);
+   CREATE TABLE IF NOT EXISTS whatsapp_chat_aliases(alias TEXT PRIMARY KEY,chat_id TEXT NOT NULL REFERENCES chats(id));
    CREATE TABLE IF NOT EXISTS events(id TEXT PRIMARY KEY, kind TEXT NOT NULL, detail TEXT NOT NULL, created INTEGER NOT NULL);
    CREATE TABLE IF NOT EXISTS whatsapp_groups(id TEXT PRIMARY KEY,name TEXT NOT NULL,unread INTEGER NOT NULL DEFAULT 0,updated INTEGER NOT NULL);
    CREATE TABLE IF NOT EXISTS whatsapp_group_messages(id TEXT PRIMARY KEY,group_id TEXT NOT NULL REFERENCES whatsapp_groups(id),provider_id TEXT NOT NULL UNIQUE,author_name TEXT NOT NULL,body TEXT NOT NULL,created INTEGER NOT NULL);

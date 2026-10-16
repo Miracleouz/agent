@@ -9,6 +9,7 @@ export {hashPassword} from './accounts.js';
 import {z} from 'zod';
 import {readRows,validateRows,replaceCatalog,fetchSheet,sheetExport} from './catalog.js';
 import {Agent} from './agent.js';
+import {contactRoutes} from './contacts.js';
 const fail=(message,status=400)=>Object.assign(new Error(message),{status});
 export function createApp({store,whatsapp,production=false,appUrl=process.env.APP_URL}){
  const app=express();app.disable('x-powered-by');
@@ -97,6 +98,7 @@ export function createApp({store,whatsapp,production=false,appUrl=process.env.AP
   store.event('order',`Pedido marcado como fechado por ${req.user.name}.`);res.json(store.chat(chat.id));
  });
  const agent=new Agent(store,(chat,body,actions)=>whatsapp.send(chat,body,actions),{canSend:chat=>chat.channel==='simulator'||whatsapp.snapshot().status==='ready'});whatsapp.receiver=input=>agent.receive(input);
+ contactRoutes({app,store,accounts,agent,whatsapp});
  app.post('/api/chats/:id/send',async(req,res)=>{
   const original=getChat(req.params.id),{body,version}=z.object({body:z.string().trim().min(1).max(4000),version:z.number().int().min(0).optional()}).strict().parse(req.body);
   const result=await agent.enqueue(`${original.provider}:${original.channel}:${original.phone}`,async()=>{

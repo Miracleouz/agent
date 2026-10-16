@@ -39,7 +39,8 @@ export class WhatsApp {
    const body=attachment?'[Áudio ou anexo recebido — requer atendimento humano]':(message.selectedButtonId||message.selectedRowId||message.body);
    if(typeof body!=='string'||!body.trim())return;
    if(group){this.store.addGroupMessage({id:message.from,providerId:message.id._serialized,author:message._data?.notifyName||message.author?.replace(/@.*$/,'')||'Participante',body:attachment?'[Áudio ou anexo recebido no grupo]':body,created:message.timestamp*1000});return;}
-   this.receiver?.({phone:message.from,name:message._data?.notifyName||message.from.replace(/@.*$/,''),body,forceHuman:attachment,providerId:message.id._serialized,channel:'whatsapp',provider:'qr'}).catch(()=>this.store.event('error','Falha no processamento de uma mensagem recebida. Verifique a conversa.'));
+   const mapped=this.store.get("SELECT c.phone FROM whatsapp_chat_aliases a JOIN chats c ON c.id=a.chat_id WHERE a.alias=? AND c.channel='whatsapp' AND c.provider='qr'",message.from);
+   this.receiver?.({phone:mapped?.phone||message.from,name:message._data?.notifyName||message.from.replace(/@.*$/,''),body,forceHuman:attachment,providerId:message.id._serialized,channel:'whatsapp',provider:'qr'}).catch(()=>this.store.event('error','Falha no processamento de uma mensagem recebida. Verifique a conversa.'));
   });
   client.initialize().catch(()=>{if(this.generation===generation)this.update('error','Não foi possível abrir o WhatsApp Web. Verifique a rede, a liberação de web.whatsapp.com e tente reconectar.');});
   return this.snapshot();
@@ -55,6 +56,18 @@ export class WhatsApp {
   const numbered=actions?.length&&['close_order','help_yes','delivery_pickup'].includes(actions[0].id);
   const menu=numbered?'\n\n'+actions.map((a,i)=>`${i+1} — ${a.label}`).join('\n')+(actions.length===2?'\n\nResponda *1* ou *2*.':'\n\nResponda *1*, *2* ou *3*.'):actions?.length?'\n\n'+actions.map(a=>a.id==='more'?'↪ Digite *MAIS* para ver mais opções.':'👤 Digite *ATENDENTE* para falar com uma pessoa.').join('\n'):'';
   const result=await this.client.sendMessage(chat.phone,body+menu);return result.id?._serialized;
+ }
+ async resolveContact(phone){
+  if(this.status!=='ready'||!this.client)throw Object.assign(new Error('Conecte o WhatsApp antes de iniciar uma conversa.'),{status:409});
+  const client=this.client,generation=this.generation,id=(await client.getNumberId(phone))?._serialized;
+  if(!id)throw Object.assign(new Error('Este telefone não foi encontrado no WhatsApp.'),{status:422});
+  if(!/^\d+@(c\.us|lid|s\.whatsapp\.net)$/.test(id))throw Object.assign(new Error('Não foi possível confirmar o número do WhatsApp.'),{status:422});
+  const identities=await client.getContactLidAndPhone([id]);
+  if(this.client!==client||this.generation!==generation||this.status!=='ready')throw Object.assign(new Error('O WhatsApp desconectou. Tente novamente depois de conectar.'),{status:409});
+  const aliases=[...new Set([id,...identities.filter(item=>item.pn===id||item.lid===id).flatMap(item=>[item.pn,item.lid]).filter(Boolean)])];
+  for(const alias of [...aliases])if(/^\d+@(c\.us|s\.whatsapp\.net)$/.test(alias)){const number=alias.split('@')[0];for(const suffix of ['c.us','s.whatsapp.net'])if(!aliases.includes(number+'@'+suffix))aliases.push(number+'@'+suffix);}
+  if(aliases.includes(client.info?.wid?._serialized)||aliases.includes(client.info?.lid?._serialized))throw Object.assign(new Error('Escolha o WhatsApp de um cliente, diferente do número da loja.'),{status:400});
+  return{id,aliases};
  }
  async disconnect(){++this.generation;const client=this.client;this.client=null;if(client){try{if(this.status==='ready')await client.logout();}catch{}await client.destroy().catch(()=>{});}this.qr=null;this.number=null;this.update('disconnected');}
  async close(){++this.generation;if(this.client)await this.client.destroy().catch(()=>{});}

@@ -64,6 +64,15 @@ O lote aceita até 50 pessoas e só é aplicado se todos os registros forem vál
 
 **Pode separar**, **quero fechar** e **vou comprar** criam o alerta **Quer fechar pedido** e pausam a conversa. Depois de conferir os detalhes com o cliente, o responsável usa **Marcar pedido fechado**, que registra seu nome no painel. Isso não envia outra mensagem automática, não cobra e não baixa o estoque. Pedidos de atendente mantêm seu próprio aviso. Para voltar ao atendimento automático, use **Reativar agente** somente naquele chat.
 
+## Contatos e primeira mensagem manual
+
+1. Abra **Contatos → Novo contato**. Informe nome, WhatsApp com DDD e, se quiser, empresa. Para números internacionais, use `+` e o código do país. No Brasil, `(11) 99999-9999` e `+55 (11) 99999-9999` identificam o mesmo cadastro.
+2. Conecte o WhatsApp da loja por QR e clique em **Conversar**. O número é consultado antes de abrir; se não estiver no WhatsApp, aparece um aviso. O sistema reaproveita o histórico confirmado e coloca uma conversa livre sob sua responsabilidade em modo manual.
+3. Digite a mensagem no campo de resposta manual e clique em **Enviar mensagem**. Cadastrar, editar e abrir um contato não enviam mensagem. O nome do atendente acompanha o texto conforme a configuração de assinaturas da loja.
+4. Enquanto o atendimento estiver manual, o bot não responde nem envia o aviso de cinco minutos. Para voltar ao bot, use **Reativar agente**; novas respostas automáticas continuam dependendo de uma mensagem recebida do cliente.
+
+A agenda é compartilhada pela equipe. Admin e Comercial podem cadastrar, editar e buscar. Só Admin pode excluir um cadastro; excluir não apaga as mensagens. Os limites de acesso aos chats permanecem: Comercial não abre conversa de outro responsável; Admin pode observar e transferir pelos controles existentes. **Liberar conversa** permite que outra pessoa assuma.
+
 ## Comandos do dia a dia
 
 Iniciar novamente, sem reconstruir a imagem:
@@ -126,6 +135,8 @@ Depois de cotar, agradecimentos como **ok,obgd** e **obrigado pelos valores** re
 A versão **1.8.0** reconhece o cliente enviando motorista, motoboy, Uber ou 99 para buscar e registra **RETIRA**. Também aceita `vou mandar retirar` e `vou retirar`. Pergunta **Para agilizar na hora da retirada informe nome de quem vai retirar e nome da empresa**, com uma tentativa por chat em 24 horas, sem insistência depois. Os textos recebidos aparecem em **Retirada · identificação** e no histórico. Pausas e atendimentos humanos são respeitados. A migração apenas acrescenta campos ao banco; atualizar não dispara mensagens antigas. Ao substituir os arquivos, preserve `.env` e os dados existentes. Recrie o serviço com `docker compose up -d --build` na mesma pasta da instalação e atualize o navegador com Ctrl+F5.
 
 A versão **1.9.0** substitui o menu antigo de cinco minutos por **encerramento por inatividade**: após cinco minutos sem resposta no atendimento automático, avisa o cliente uma vez e encerra. Uma nova mensagem válida reinicia o prazo; só uma nova solicitação do cliente pode reabrir a conversa depois de encerrada. O prazo é fixo e aparece em Configurações. Atendimentos assumidos ou encaminhados para pessoas continuam sob controle da equipe. A coleta de envio após três minutos do interesse de compra continua separada. Cadastro, histórico importado, QR e reinício não iniciam conversas nem disparam avisos antigos. A migração adiciona campos de verificação sem apagar estoque, usuários ou histórico; nenhuma mensagem antiga é marcada como nova.
+
+A versão **1.10.0** adiciona a agenda **Contatos** e o início de conversa manual pelo usuário, com assinatura, responsabilidade exclusiva por chat e verificação do número no WhatsApp conectado. O bot continua sem autorização para primeiro contato automático. A migração cria tabelas de agenda e vínculos de identificação, preservando os dados anteriores.
 
 ## Cotações configuradas
 
