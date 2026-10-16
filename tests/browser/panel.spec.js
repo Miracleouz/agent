@@ -97,8 +97,8 @@ test('ROBINHO greets site visitors and quotes all items including finished and c
 });
 test('team member signs replies, shows typing and confirms orders in the shared inbox',async({page,browser,baseURL})=>{
  await page.goto('/');await page.getByLabel('E-mail',{exact:true}).fill('marina@example.test');await page.getByLabel('Senha',{exact:true}).fill('owner-pass-test-123');await page.getByRole('button',{name:'Entrar no painel',exact:true}).click();
- await page.getByRole('button',{name:'Equipe',exact:true}).click();await page.getByRole('button',{name:'Novo atendente',exact:true}).click();
- await page.getByLabel('Nome do atendente',{exact:true}).fill('Rafael Costa');await page.getByLabel('E-mail do atendente',{exact:true}).fill('rafael@example.test');await page.getByLabel('Senha do atendente',{exact:true}).fill('rafael-pass-12345');await page.getByRole('button',{name:'Salvar atendente',exact:true}).click();
+ await page.getByRole('button',{name:'Equipe',exact:true}).click();await page.getByRole('button',{name:'Novo usuário',exact:true}).click();
+ await page.getByLabel('Nome do usuário',{exact:true}).fill('Rafael Costa');await page.getByLabel('E-mail do usuário',{exact:true}).fill('rafael@example.test');await page.getByLabel('Senha do usuário',{exact:true}).fill('rafael-pass-12345');await page.getByRole('button',{name:'Salvar usuário',exact:true}).click();
  await expect(page.getByRole('cell',{name:'Rafael Costa',exact:true})).toBeVisible();await page.getByRole('button',{name:'Conversas',exact:true}).click();
  async function incoming(body){await page.getByRole('button',{name:'Testar agente',exact:true}).click();await page.getByLabel('Mensagem do cliente').fill(body);await page.getByRole('button',{name:'Enviar teste',exact:true}).click();}
  await incoming('pode separar');await expect(page.locator('.chat-notice')).toContainText('Cliente quer fechar pedido');
@@ -116,4 +116,28 @@ test('team member signs replies, shows typing and confirms orders in the shared 
   await page.screenshot({path:'test-results/shared-team-order.png',fullPage:true});
   await page.getByRole('button',{name:'Equipe',exact:true}).click();await page.getByRole('button',{name:'Desativar Rafael Costa',exact:true}).click();await expect(colleague.getByRole('button',{name:'Entrar no painel',exact:true})).toBeVisible({timeout:10000});
  }finally{await context.close();}
+});
+test('Admin registers five users in a batch, changes roles and transfers chats between Comerciais',async({page,browser,baseURL})=>{
+ await page.goto('/');await page.getByLabel('E-mail',{exact:true}).fill('marina@example.test');await page.getByLabel('Senha',{exact:true}).fill('owner-pass-test-123');await page.getByRole('button',{name:'Entrar no painel',exact:true}).click();
+ await page.getByRole('button',{name:'Equipe',exact:true}).click();await page.getByRole('button',{name:'Cadastrar em lote',exact:true}).click();
+ const lines='Gestora Teste;gestora@example.test;admin\nGestor Teste;gestor@example.test;admin\nComercial Um;comercial1@example.test;comercial\nComercial Dois;comercial2@example.test;comercial\nComercial Tres;comercial3@example.test;comercial';
+ await page.getByLabel('Usuários para cadastrar',{exact:true}).fill(lines);await page.getByLabel('Senha inicial da equipe',{exact:true}).fill('team-ui-fixture-12345');await page.getByRole('button',{name:'Cadastrar usuários',exact:true}).click();
+ await expect(page.getByRole('dialog')).toHaveCount(0);await expect(page.getByRole('row').filter({hasText:'gestora@example.test'})).toContainText('Admin');await expect(page.getByRole('row').filter({hasText:'comercial1@example.test'})).toContainText('Comercial');
+ await page.screenshot({path:'test-results/admin-team-roles.png',fullPage:true});
+ await page.getByRole('button',{name:'Conversas',exact:true}).click();await page.locator('.chat-item').filter({hasText:'Cliente de teste'}).first().click();
+ async function transfer(target,name){await target.getByRole('button',{name:'Transferir',exact:true}).click();await target.getByLabel('Responsável pelo atendimento').selectOption({label:name+' · Comercial'});await target.getByRole('button',{name:'Confirmar transferência',exact:true}).click();await expect(target.getByRole('dialog')).toHaveCount(0);}
+ await transfer(page,'Comercial Um');
+ const contexts=[];
+ async function login(email){const context=await browser.newContext({baseURL,viewport:{width:1440,height:1050}});contexts.push(context);const target=await context.newPage();await target.goto('/');await target.getByLabel('E-mail',{exact:true}).fill(email);await target.getByLabel('Senha',{exact:true}).fill('team-ui-fixture-12345');await target.getByRole('button',{name:'Entrar no painel',exact:true}).click();await expect(target.getByRole('heading',{name:'Conversas',exact:true})).toBeVisible();return target;}
+ try{
+  const one=await login('comercial1@example.test'),two=await login('comercial2@example.test'),manager=await login('gestora@example.test');
+  await one.locator('.chat-filters').getByRole('button',{name:'Meus',exact:true}).click();await expect(one.locator('.chat-item')).toHaveCount(1);await expect(one.getByRole('button',{name:'Equipe',exact:true})).toHaveCount(0);await expect(two.locator('.chat-item')).toHaveCount(0);
+  await manager.locator('.chat-item').first().click();await expect(manager.locator('.team-chat-controls')).toContainText('Comercial Um');await expect(manager.getByRole('button',{name:'Equipe',exact:true})).toBeVisible();await transfer(manager,'Comercial Dois');
+  await expect(one.locator('.chat-item')).toHaveCount(0);await expect(two.locator('.chat-item')).toHaveCount(1);await two.locator('.chat-item').first().click();await expect(two.locator('.team-chat-controls')).toContainText('Comercial Dois');
+  await manager.screenshot({path:'test-results/admin-shared-inbox.png',fullPage:true});
+  await page.getByRole('button',{name:'Equipe',exact:true}).click();await page.getByRole('button',{name:'Editar Gestora Teste',exact:true}).click();await page.getByLabel('Cargo',{exact:true}).selectOption('comercial');await page.getByRole('button',{name:'Salvar usuário',exact:true}).click();
+  await expect(manager.getByRole('button',{name:'Entrar no painel',exact:true})).toBeVisible({timeout:10000});
+  await manager.getByLabel('E-mail',{exact:true}).fill('gestora@example.test');await manager.getByLabel('Senha',{exact:true}).fill('team-ui-fixture-12345');await manager.getByRole('button',{name:'Entrar no painel',exact:true}).click();await expect(manager.getByRole('heading',{name:'Conversas',exact:true})).toBeVisible();await expect(manager.getByRole('button',{name:'Equipe',exact:true})).toHaveCount(0);await expect(manager.locator('.chat-item')).toHaveCount(0);
+  await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBeTruthy();
+ }finally{for(const context of contexts)await context.close();}
 });

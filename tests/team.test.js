@@ -25,7 +25,7 @@ async function fixture(t){
 test('each account has a private credential and shared chats, while administrative data stays with the owner',async t=>{
  const{owner,first,second,store,chat}=await fixture(t);const r=await chat();
  for(const user of [first,second]){
-  const status=await user.client.get('/api/auth/status').expect(200);assert.equal(status.body.user.name,user.name);assert.equal(status.body.user.role,'agent');assert(!JSON.stringify(status.body).includes('password'));
+  const status=await user.client.get('/api/auth/status').expect(200);assert.equal(status.body.user.name,user.name);assert.equal(status.body.user.role,'comercial');assert(!JSON.stringify(status.body).includes('password'));
   const data=await user.client.get('/api/bootstrap').expect(200);assert(data.body.chats.some(c=>c.id===r.chatId));assert.equal(data.body.connection.qr,undefined);assert.equal(data.body.settings.sheetUrl,undefined);assert.deepEqual(data.body.events,[]);
  }
  const list=await owner.get('/api/users').expect(200);assert.equal(list.body.length,3);assert(!JSON.stringify(list.body).includes('password'));
@@ -37,14 +37,14 @@ test('attendants cannot administer users, inventory, prices, settings or the sha
  for(const [url,body] of [['/api/users',{name:'Fake',email:'fake@example.test',password:'123456789012',role:'owner'}],['/api/whatsapp/connect',{}],['/api/whatsapp/disconnect',{}],['/api/stock/sync',{url:'https://example.test'}],['/api/stock/import',{}],['/api/stock/preview',{}]])await post(first.client,url,body).expect(403);
  await patch(first.client,'/api/settings',{agentEnabled:false}).expect(403);await patch(first.client,`/api/users/${first.id}`,{active:false}).expect(403);
  await post(owner,'/api/users',{name:'Fake',email:'fake@example.test',password:'123456789012',role:'owner'}).expect(400);
- await patch(owner,'/api/users/owner',{active:false}).expect(403);
+ await patch(owner,'/api/users/owner',{active:false}).expect(409);
 });
 test('the first attendant claims the chat and concurrent replies from another attendant are blocked',async t=>{
  const{first,second,store,chat,sent}=await fixture(t);const r=await chat();
  const results=await Promise.all([post(first.client,`/api/chats/${r.chatId}/pause`,{minutes:null}),post(second.client,`/api/chats/${r.chatId}/pause`,{minutes:null})]);
  assert.deepEqual(results.map(r=>r.status).sort(),[200,409]);const assigned=store.chat(r.chatId).assigned_user_id;const current=assigned===first.id?first:second,other=assigned===first.id?second:first;
  const count=sent.length;const result=await post(current.client,`/api/chats/${r.chatId}/send`,{body:'Olá, vou te atender.'}).expect(201);
- assert.equal(result.body.author_id,current.id);assert.equal(result.body.author_name,current.name);assert.equal(result.body.author_role,'agent');assert.equal(result.body.body,'Olá, vou te atender.');assert.equal(result.body.delivery_body,`*${current.name}*: Olá, vou te atender.`);
+ assert.equal(result.body.author_id,current.id);assert.equal(result.body.author_name,current.name);assert.equal(result.body.author_role,'comercial');assert.equal(result.body.body,'Olá, vou te atender.');assert.equal(result.body.delivery_body,`*${current.name}*: Olá, vou te atender.`);
  assert.equal(sent.at(-1).body,`*${current.name}*: Olá, vou te atender.`);
  await post(other.client,`/api/chats/${r.chatId}/send`,{body:'Não deve sair'}).expect(409);await post(other.client,`/api/chats/${r.chatId}/resume`).expect(409);assert.equal(sent.length,count+1);
 });
@@ -54,10 +54,10 @@ test('owner can explicitly transfer a chat while the previous attendant loses pe
  assert.equal(store.chat(r.chatId).assigned_user_id,'owner');await post(first.client,`/api/chats/${r.chatId}/send`,{body:'Não deve sair'}).expect(409);
 });
 test('typing presence uses the logged in name and accepts no forged identity or text',async t=>{
- const{first,second,chat}=await fixture(t);const r=await chat();await post(first.client,`/api/chats/${r.chatId}/pause`,{minutes:null}).expect(200);
+ const{owner,first,second,chat}=await fixture(t);const r=await chat();await post(first.client,`/api/chats/${r.chatId}/pause`,{minutes:null}).expect(200);
  await post(first.client,`/api/chats/${r.chatId}/typing`,{typing:true,name:'Dona'}).expect(400);
  await post(first.client,`/api/chats/${r.chatId}/typing`,{typing:true}).expect(200);
- const response=await second.client.get('/api/bootstrap').expect(200);assert.deepEqual(response.body.typing,[{chatId:r.chatId,userId:first.id,name:first.name}]);
+ const response=await owner.get('/api/bootstrap').expect(200);assert.deepEqual(response.body.typing,[{chatId:r.chatId,userId:first.id,name:first.name}]);assert.deepEqual((await second.client.get('/api/bootstrap')).body.typing,[]);
  await post(second.client,`/api/chats/${r.chatId}/typing`,{typing:true}).expect(409);
  await post(first.client,`/api/chats/${r.chatId}/typing`,{typing:false}).expect(200);assert.deepEqual((await second.client.get('/api/bootstrap')).body.typing,[]);
 });
@@ -100,7 +100,7 @@ test('legacy owner credentials and sessions migrate without exposing hashes or l
  raw.exec("CREATE TABLE chats(id TEXT PRIMARY KEY,phone TEXT NOT NULL,name TEXT NOT NULL,channel TEXT NOT NULL,provider TEXT NOT NULL,mode TEXT NOT NULL DEFAULT 'auto',pause_until INTEGER,needs_human INTEGER NOT NULL DEFAULT 0,unread INTEGER NOT NULL DEFAULT 0,query TEXT,shown TEXT NOT NULL DEFAULT '[]',updated INTEGER NOT NULL,last_inbound INTEGER NOT NULL, handoff_reason TEXT, UNIQUE(phone,channel,provider));INSERT INTO chats(id,phone,name,channel,provider,mode,needs_human,updated,last_inbound,handoff_reason) VALUES('old-purchase','5511001','Cliente antigo','whatsapp','qr','manual',1,100,100,'purchase'),('old-human','5511002','Outro cliente','whatsapp','qr','manual',1,100,100,'human');");
  raw.prepare('INSERT INTO owner VALUES(1,?,?,?)').run('Dono antigo','old@example.test',hash);raw.prepare('INSERT INTO sessions VALUES(?,?)').run(createHash('sha256').update(token).digest('hex'),Date.now()+60000);raw.close();
  const store=new Store(file);const app=createApp({store,whatsapp:{snapshot:()=>({status:'disconnected'})}});t.after(()=>{app.locals.close();store.close();});
- const migrated=await request(app).get('/api/auth/status').set('Cookie',`cota_session=${token}`).expect(200);assert.equal(migrated.body.user.role,'owner');assert.equal(migrated.body.user.name,'Dono antigo');assert(!JSON.stringify(migrated.body).includes(hash));
+ const migrated=await request(app).get('/api/auth/status').set('Cookie',`cota_session=${token}`).expect(200);assert.equal(migrated.body.user.role,'admin');assert.equal(migrated.body.user.name,'Dono antigo');assert(!JSON.stringify(migrated.body).includes(hash));
  assert.equal(store.chat('old-purchase').order_state,'interest');assert.equal(store.chat('old-purchase').purchase_requested,1);assert.equal(store.chat('old-human').human_requested,1);assert.equal(store.chat('old-human').mode,'manual');
  await request(app).post('/api/chats/old-purchase/order/confirm').set('Cookie',`cota_session=${token}`).set('X-Cota-Request','1').send({}).expect(200);assert.equal(store.chat('old-purchase').order_state,'confirmed');
  await post(request.agent(app),'/api/auth/login',{email:'old@example.test',password:'legacy-owner-12345'}).expect(200);

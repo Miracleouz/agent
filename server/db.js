@@ -10,8 +10,7 @@ export class Store extends EventEmitter {
   super();mkdirSync(dirname(file),{recursive:true});this.db=new DatabaseSync(file);
   this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;
    CREATE TABLE IF NOT EXISTS owner(id INTEGER PRIMARY KEY CHECK(id=1), name TEXT NOT NULL, email TEXT NOT NULL UNIQUE, password TEXT NOT NULL);
-   CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,name TEXT NOT NULL,email TEXT NOT NULL UNIQUE COLLATE NOCASE,password TEXT NOT NULL,role TEXT NOT NULL CHECK(role IN ('owner','agent')),active INTEGER NOT NULL DEFAULT 1,created INTEGER NOT NULL);
-   CREATE UNIQUE INDEX IF NOT EXISTS users_one_owner ON users(role) WHERE role='owner';
+   CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,name TEXT NOT NULL,email TEXT NOT NULL UNIQUE COLLATE NOCASE,password TEXT NOT NULL,role TEXT NOT NULL CHECK(role IN ('admin','comercial')),active INTEGER NOT NULL DEFAULT 1,created INTEGER NOT NULL);
    CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, expires INTEGER NOT NULL);
    CREATE TABLE IF NOT EXISTS settings(id INTEGER PRIMARY KEY CHECK(id=1), value TEXT NOT NULL);
    CREATE TABLE IF NOT EXISTS products(id TEXT PRIMARY KEY, sku TEXT NOT NULL, name TEXT NOT NULL, brand TEXT NOT NULL, variant TEXT NOT NULL DEFAULT '', price REAL CHECK(price>0), quantity REAL NOT NULL CHECK(quantity>=0), unit TEXT NOT NULL DEFAULT 'unidade', updated INTEGER NOT NULL);
@@ -22,8 +21,17 @@ export class Store extends EventEmitter {
    CREATE INDEX IF NOT EXISTS chats_updated ON chats(updated);
    CREATE TABLE IF NOT EXISTS events(id TEXT PRIMARY KEY, kind TEXT NOT NULL, detail TEXT NOT NULL, created INTEGER NOT NULL);
   `);
+  // Rebuild the old CHECK constraint without changing user IDs or session references.
+  if(!this.get("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").sql.includes("'comercial'")){
+   this.db.exec('PRAGMA foreign_keys=OFF; BEGIN IMMEDIATE');
+   try{
+    this.db.exec("CREATE TABLE users_next(id TEXT PRIMARY KEY,name TEXT NOT NULL,email TEXT NOT NULL UNIQUE COLLATE NOCASE,password TEXT NOT NULL,role TEXT NOT NULL CHECK(role IN ('admin','comercial')),active INTEGER NOT NULL DEFAULT 1,created INTEGER NOT NULL);INSERT INTO users_next SELECT id,name,email,password,CASE role WHEN 'owner' THEN 'admin' WHEN 'agent' THEN 'comercial' ELSE role END,active,created FROM users;DROP TABLE users;ALTER TABLE users_next RENAME TO users;");
+    if(this.all('PRAGMA foreign_key_check').length)throw new Error('Não foi possível preservar as referências dos usuários.');
+    this.db.exec('COMMIT');
+   }catch(error){this.db.exec('ROLLBACK');throw error;}finally{this.db.exec('PRAGMA foreign_keys=ON');}
+  }
   const legacyOwner=this.get('SELECT * FROM owner WHERE id=1');
-  if(legacyOwner&&!this.get("SELECT id FROM users WHERE role='owner'"))this.run("INSERT INTO users(id,name,email,password,role,created) VALUES('owner',?,?,?,'owner',?)",legacyOwner.name,legacyOwner.email.toLowerCase(),legacyOwner.password,Date.now());
+  if(legacyOwner&&!this.get("SELECT id FROM users WHERE id='owner'"))this.run("INSERT INTO users(id,name,email,password,role,created) VALUES('owner',?,?,?,'admin',?)",legacyOwner.name,legacyOwner.email.toLowerCase(),legacyOwner.password,Date.now());
   if(!this.all('PRAGMA table_info(sessions)').some(column=>column.name==='user_id')){this.db.exec('ALTER TABLE sessions ADD COLUMN user_id TEXT REFERENCES users(id)');if(legacyOwner)this.run("UPDATE sessions SET user_id='owner' WHERE user_id IS NULL");}
   for(const [name,type] of [['author_id','TEXT'],['author_name','TEXT'],['author_role','TEXT'],['delivery_body','TEXT']])if(!this.all('PRAGMA table_info(messages)').some(column=>column.name===name))this.db.exec(`ALTER TABLE messages ADD COLUMN ${name} ${type}`);
   if(!this.all('PRAGMA table_info(chats)').some(column=>column.name==='pending_measure'))this.db.exec('ALTER TABLE chats ADD COLUMN pending_measure TEXT');
@@ -58,6 +66,9 @@ export class Store extends EventEmitter {
  }
  pause(id,minutes,userId=null){this.cancelFollowups(id);this.run("UPDATE chats SET mode='manual',pause_until=?,assigned_user_id=? WHERE id=?",minutes?Date.now()+minutes*60000:null,userId,id);this.changed();return this.chat(id);}
  resume(id){this.cancelFollowups(id);this.run("UPDATE chats SET mode='auto',pause_until=NULL,needs_human=0,handoff_reason=NULL,purchase_summary=NULL,pending_selection=NULL,assigned_user_id=NULL,human_requested=0,purchase_requested=0 WHERE id=?",id);this.changed();return this.chat(id);}
- stats(){return {products:this.get('SELECT count(*) n FROM products WHERE quantity>0 AND price>0').n,conversations:this.get("SELECT count(*) n FROM chats WHERE channel='whatsapp'").n,replies:this.get("SELECT count(*) n FROM messages m JOIN chats c ON c.id=m.chat_id WHERE m.direction='bot' AND m.status='sent' AND c.channel='whatsapp'").n,waiting:this.get('SELECT count(*) n FROM chats WHERE needs_human=1').n};}
+ stats({userId=null}={}){
+  const scope=userId?' AND (c.assigned_user_id IS NULL OR c.assigned_user_id=?)':'',args=userId?[userId]:[];
+  return {products:this.get('SELECT count(*) n FROM products WHERE quantity>0 AND price>0').n,conversations:this.get("SELECT count(*) n FROM chats c WHERE c.channel='whatsapp'"+scope,...args).n,replies:this.get("SELECT count(*) n FROM messages m JOIN chats c ON c.id=m.chat_id WHERE m.direction='bot' AND m.status='sent' AND c.channel='whatsapp'"+scope,...args).n,waiting:this.get('SELECT count(*) n FROM chats c WHERE c.needs_human=1'+scope,...args).n};
+ }
  close(){this.db.close();}
 }

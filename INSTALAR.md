@@ -21,7 +21,7 @@ A primeira execução baixa as dependências e pode demorar alguns minutos. Agua
 8. Abra **Estoque → Importar uma planilha** e selecione seu próprio arquivo Excel/CSV de estoque. Confira a prévia e confirme a substituição. Para Google Sheets, cole o link da sua planilha e sincronize. O ZIP do GitHub contém apenas o código; estoque e dados de acesso são configurados nesta etapa.
 9. Abra **WhatsApp → Gerar QR Code**. No celular: **WhatsApp → Aparelhos conectados → Conectar um aparelho**. Leia o código.
 10. Use **Testar agente** para conferir as cotações no simulador antes de atender clientes.
-11. Em **Equipe → Novo atendente**, cadastre nome, e-mail e senha de cada pessoa. Cada atendente abre a mesma instalação no navegador com seu próprio login. O QR conecta o número da loja; não é necessário conectar um número por usuário.
+11. Em **Equipe → Novo usuário**, cadastre nome, e-mail, senha e cargo (**Admin** ou **Comercial**). Também há **Cadastrar em lote**. Cada pessoa abre a mesma instalação no navegador com seu próprio login. O QR conecta o número da loja; não é necessário conectar um número por usuário.
 
 O computador e o Docker precisam permanecer ligados para o agente responder. O histórico, a conta e a sessão ficam no volume persistente `cota-data`; esse volume é criado na primeira execução. A instalação nova não contém contas, senhas, histórico ou sessão de WhatsApp de outro ambiente.
 
@@ -37,9 +37,19 @@ Instale o agente **uma vez**, no computador ou servidor que ficará ligado. Todo
 
 Na rede da loja, use o IP do servidor, por exemplo `http://192.168.1.50:3000`, substituindo pelo endereço real. No Windows, `ipconfig` mostra o endereço IPv4. Libere a porta 3000 no firewall para a rede local. Nos computadores dos atendentes, `localhost:3000` não acessa o servidor da loja. Se utilizar `APP_URL`, ela deve corresponder à URL que todos usam. Para acesso externo, configure domínio e HTTPS.
 
-O dono cadastra as contas em **Equipe**, com senha de pelo menos dez caracteres, e informa o acesso a cada pessoa. A aplicação não envia senhas por e-mail. Atendentes veem as mesmas conversas, assumem um chat antes de responder e podem trocar a própria senha em **Configurações**. O dono mantém o controle de estoque, conexão QR, configurações e acessos.
+Um Admin cadastra as contas em **Equipe**, com senha de pelo menos dez caracteres, e informa o acesso a cada pessoa. A aplicação não envia senhas por e-mail. **Admin** vê todos os chats, gerencia estoque, QR, configurações e acessos e pode transferir atendimentos. **Comercial** vê seus próprios chats e a fila sem responsável, assume um chat antes de responder e pode trocar a própria senha em **Configurações**. Os filtros **Meus**, **Fila** e **Aguardando** organizam os atendimentos.
 
 Ao digitar no painel, o nome aparece para os colegas. O cliente recebe a resposta assinada, por exemplo **Carla Lima: Olá, vou te atender.** O padrão é assinar; o dono pode alterar em **Configurações → Assinar mensagens no WhatsApp com o nome do atendente**. Cada chat tem um responsável por vez; o dono pode transferi-lo para si usando **Assumir atendimento**.
+
+Para transferir para outra pessoa, um Admin abre o chat, usa **Transferir**, escolhe o responsável e confirma. O agente fica pausado naquele chat. O Comercial anterior deixa de ver o histórico e o novo responsável passa a vê-lo. Administradores continuam vendo todos os atendimentos. Transferir não envia mensagem ao cliente.
+
+### Cadastrar várias pessoas de uma vez
+
+1. Entre como Admin e abra **Equipe → Cadastrar em lote**.
+2. Cole uma linha por pessoa no formato `Nome;email;cargo`, sem cabeçalho. Use `admin` ou `comercial`. Exemplo: `Pessoa de vendas;vendas@empresa.com;comercial`.
+3. Informe a senha inicial da equipe uma única vez e clique em **Cadastrar usuários**.
+
+O lote aceita até 50 pessoas e só é aplicado se todos os registros forem válidos. Se um e-mail já existir, nenhuma conta do lote é criada; edite a conta existente ou remova a linha do lote. Cada pessoa poderá trocar sua senha depois. As credenciais são salvas somente no banco da instalação em que você fez o cadastro. O ZIP contém o código, sem usuários ou senhas previamente cadastrados.
 
 **Pode separar**, **quero fechar** e **vou comprar** criam o alerta **Quer fechar pedido** e pausam a conversa. Depois de conferir os detalhes com o cliente, o responsável usa **Marcar pedido fechado**, que registra seu nome no painel. Isso não envia outra mensagem automática, não cobra e não baixa o estoque. Pedidos de atendente mantêm seu próprio aviso. Para voltar ao atendimento automático, use **Reativar agente** somente naquele chat.
 
@@ -93,6 +103,8 @@ A versão 1.2.0 entende `AT10 33000` como **33 metros de aberta**, perguntando a
 A versão 1.3.0 adiciona a apresentação fixa do **ROBINHO** uma vez a cada 24 horas, somente ao responder a uma mensagem recebida válida. Aceita `oi vim pelo site`, pedidos com várias referências e `4 PK 650` como quatro frisos de PK650, incluindo peças prontas e cortes quando cadastrados. A cotação lista até cinco opções por item; itens sem saldo ou preço não recebem valores inventados. A migração preserva o histórico e o horário da apresentação entre reinícios. A primeira apresentação após atualizar depende de uma nova mensagem do cliente; não há envio retroativo.
 
 A versão **1.4.0** adiciona contas da equipe, digitação identificada, assinaturas nas respostas, responsável por chat e alertas separados de compra, pedido fechado e solicitação de atendente. Aceita **MT, MTS, METRO e METROS** para comprimento. A conta e senha atuais do dono continuam válidas, e os alertas existentes de compra/atendente são migrados. A criação de usuários e a marcação interna de pedido fechado não enviam mensagens a clientes. Depois de atualizar, entre com a conta do dono e cadastre os demais acessos em **Equipe**.
+
+A versão **1.5.0** permite vários **Admins**, cargo **Comercial**, edição de cargos, cadastro em lote e transferências de chats entre usuários. O dono da versão anterior passa a **Admin**; os atendentes passam a **Comercial**, mantendo senhas, identificadores e histórico. Comerciais passam a ver seus próprios atendimentos e a fila sem responsável. Admins veem todos. Mudanças posteriores de cargo encerram as sessões do usuário alterado. É necessário manter pelo menos um Admin ativo.
 
 ## Cotações configuradas
 
