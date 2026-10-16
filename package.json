@@ -1,0 +1,49 @@
+{
+  "name": "cota-whatsapp",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "dev": "node --env-file-if-exists=.env server/index.js",
+    "build": "vite build",
+    "start": "NODE_ENV=production node --env-file-if-exists=.env server/index.js",
+    "test": "node --test tests/*.test.js",
+    "test:ui": "playwright test",
+    "stock:sync": "node --env-file-if-exists=.env server/import-stock.js",
+    "stock:import": "node --env-file-if-exists=.env server/import-stock.js"
+  },
+  "dependencies": {
+    "@fontsource-variable/dm-sans": "^5.3.0",
+    "@fontsource-variable/manrope": "^5.3.0",
+    "cookie-parser": "^1.4.7",
+    "csv-parse": "^7.0.3",
+    "dotenv": "^17.2.3",
+    "exceljs": "^4.4.0",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.2.1",
+    "helmet": "^8.1.0",
+    "lucide-react": "^0.468.0",
+    "multer": "^2.0.2",
+    "qrcode": "^1.5.4",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "undici": "^7.16.0",
+    "whatsapp-web.js": "^1.34.7",
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "@vitejs/plugin-react": "^5.1.1",
+    "supertest": "^7.1.4",
+    "vite": "^7.3.1"
+  },
+  "overrides": {
+    "@puppeteer/browsers": "^3.2.5",
+    "exceljs": {
+      "uuid": "^11.1.1"
+    }
+  }
+}

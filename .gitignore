@@ -1,0 +1,16 @@
+node_modules/
+dist/
+data/
+.env
+.env.*
+!.env.example
+playwright-report/
+test-results/
+*.log
+
+# Local delivery packages and private inventory
+estoque/
+entrega/
+ESTOQUE*.xlsx
+ESTOQUE*.csv
+cota-whatsapp*.zip

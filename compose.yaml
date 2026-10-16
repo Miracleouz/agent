@@ -1,0 +1,16 @@
+services:
+  cota:
+    build: .
+    init: true
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      APP_URL: ${APP_URL:-}
+      WHATSAPP_AUTO_CONNECT: "true"
+    volumes:
+      - cota-data:/app/data
+    shm_size: 512mb
+volumes:
+  cota-data:
