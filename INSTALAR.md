@@ -166,6 +166,8 @@ A versão **1.14.0** adiciona leitura sincronizada com o celular, confirmação 
 
 A versão **1.14.1** mantém o funcionamento da 1.14.0 e finaliza a entrega sem depender do logo. A bateria completa de testes de servidor e navegador foi executada novamente.
 
+A versão **1.14.2** corrige a recuperação das listas quando a consulta do WhatsApp falha em um único chat e impede que atualizações da sincronização cancelem continuamente a carga de Contatos. O painel informa qual etapa ficou incompleta. Atualize preservando a sessão; não é necessário apagar o volume ou gerar outro QR para instalar a correção. Veja [CORRECAO_SINCRONIZACAO_1_14_2.md](docs/CORRECAO_SINCRONIZACAO_1_14_2.md).
+
 ## Cotações configuradas
 
 - **Abertas:** `(preço por metro da faixa inteira ÷ largura cadastrada em mm) × comprimento pedido em metros × largura pedida em mm`.

@@ -1,12 +1,20 @@
 import {ContactHistory} from './contact-history.jsx';
-import React,{useEffect,useState} from 'react';
+import React,{useEffect,useState,useRef} from 'react';
 import {Plus,Search,MessageCircle,Pencil,Trash2,ChevronLeft,ChevronRight,UserRound} from 'lucide-react';
 import {WhatsAppSyncStatus} from './whatsapp-sync.jsx';
 const blank={name:'',phone:'',company:''};
 export function Contacts({api,Modal,Spinner,notify,currentUser,revision,onOpen,opening,connection,act}){
  const[data,setData]=useState({items:[],total:0,limit:50}),[search,setSearch]=useState(''),[page,setPage]=useState(0),[editing,setEditing]=useState(null),[form,setForm]=useState(blank),[busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[removing,setRemoving]=useState(null),[history,setHistory]=useState(null);
+ const reload=useRef(null);
  async function load(){try{const result=await api(`/contacts?search=${encodeURIComponent(search)}&page=${page}`);setData(result);}catch(error){notify(error.message,'error');}finally{setLoading(false);}}
- useEffect(()=>{let active=true;const timer=setTimeout(async()=>{try{const result=await api(`/contacts?search=${encodeURIComponent(search)}&page=${page}`);if(active)setData(result);}catch(error){if(active)notify(error.message,'error');}finally{if(active)setLoading(false);}},150);return()=>{active=false;clearTimeout(timer);};},[search,page,revision]);
+ useEffect(()=>{
+  let active=true,timer=null,running=false,dirty=false;
+  const schedule=()=>{dirty=true;if(timer||running||!active)return;timer=setTimeout(async()=>{timer=null;running=true;dirty=false;try{const result=await api(`/contacts?search=${encodeURIComponent(search)}&page=${page}`);if(active)setData(result);}catch(error){if(active)notify(error.message,'error');}finally{running=false;if(active){setLoading(false);if(dirty)schedule();}}},150);};
+  reload.current=schedule;schedule();return()=>{active=false;clearTimeout(timer);if(reload.current===schedule)reload.current=null;};
+ },[search,page,api,notify]);
+ // Progress events may arrive faster than the request. Never cancel the same query
+ // just because bootstrap refreshed; otherwise imported contacts can stay invisible.
+ useEffect(()=>{reload.current?.();},[revision]);
  function edit(contact){setForm(contact?{name:contact.name,phone:'+'+contact.phone,company:contact.company}:blank);setEditing(contact||{});}
  async function save(event){event.preventDefault();setBusy(true);try{await api(editing.id?`/contacts/${editing.id}`:'/contacts',{method:editing.id?'PATCH':'POST',body:form});setEditing(null);await load();notify('Contato salvo. Nenhuma mensagem foi enviada.');}catch(error){notify(error.message,'error');}finally{setBusy(false);}}
  async function remove(){setBusy(true);try{await api(`/contacts/${removing.id}`,{method:'DELETE'});setRemoving(null);await load();notify('Contato removido da agenda. O histórico foi mantido.');}catch(error){notify(error.message,'error');}finally{setBusy(false);}}

@@ -105,6 +105,8 @@ body{background:#f4f6fa}
 .read-sync-status button{display:inline-flex;align-items:center;gap:5px;margin-left:auto;background:#fff;border:1px solid #e8d8bc;border-radius:6px;padding:5px 8px;color:#8e6426;font-size:10px;cursor:pointer}
 .read-sync-status button:disabled{opacity:.6;cursor:wait}
 .modal .read-sync-status{border:1px solid var(--line);border-radius:8px;margin:15px 0}
+.sync-issues{padding-left:16px;margin:9px 0 0;color:#8b662c;font-size:11px;line-height:1.7}
+.sync-issues code{font-size:9px;color:#718096;white-space:nowrap}
 @media(min-width:1200px){
  .rail{width:214px;padding:25px 14px 20px;align-items:stretch}
  .logo-button{display:flex;gap:11px;align-items:center;padding:0 6px;justify-content:flex-start;text-align:left;width:100%}
