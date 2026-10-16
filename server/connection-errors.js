@@ -6,6 +6,8 @@ export function safeConnectionDetail(error){
 export function connectionError(error){
  const text=String(typeof error==='string'?error:error?.message||error?.code||'');
  const categories=[
+  ['auth_modules',/COTA_AUTH_MODULES_UNAVAILABLE|Cannot read properties of (?:null|undefined) \(reading '(?:Socket|Cmd|Conn|OfflineMessageHandler)'\)/i,'O WhatsApp Web não disponibilizou os componentes de autenticação a tempo. Clique em Gerar QR Code para abrir uma nova tentativa; a sessão e o histórico foram preservados.'],
+  ['page_reloaded',/COTA_AUTH_DOCUMENT_CHANGED|detached Frame|Execution context was destroyed|Cannot find context with specified id/i,'A página do WhatsApp foi recarregada durante a conexão. Clique em Gerar QR Code para tentar novamente; a sessão e o histórico foram preservados.'],
   ['profile_busy',/SingletonLock.*(?:File exists|already|EEXIST)|ProcessSingleton|profile.*(?:in use|another)|user data directory.*in use|browser is already running/i,'O perfil do Chromium está ocupado ou ficou bloqueado após um reinício. Pare instâncias duplicadas e consulte o log antes de alterar os arquivos da sessão.'],
   ['browser_missing',/Chromium não encontrado|CHROME_PATH|browser was not found|executable.*(?:not found|doesn.t exist)|could not find (?:Chrome|Chromium)|spawn .*ENOENT/i,'Chromium não encontrado. No Docker, reconstrua a imagem; fora dele, instale o navegador e confira CHROME_PATH.'],
   ['permissions',/EACCES|EPERM|permission denied|read-only file system|EROFS/i,'O serviço não tem permissão para usar o navegador ou gravar a sessão. Confira as permissões do volume de dados.'],

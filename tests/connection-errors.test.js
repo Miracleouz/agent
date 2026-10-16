@@ -9,6 +9,11 @@ import {Store} from '../server/db.js';
 import {WhatsApp} from '../server/whatsapp.js';
 import {connectionError,safeConnectionDetail,authenticationTimeout} from '../server/connection-errors.js';
 const cases=[
+ ['Cannot read properties of null (reading \'Socket\')','auth_modules'],
+ ['COTA_AUTH_MODULES_UNAVAILABLE','auth_modules'],
+ ['Attempted to use detached Frame \'test-frame\'','page_reloaded'],
+ ['Execution context was destroyed','page_reloaded'],
+ ['COTA_AUTH_DOCUMENT_CHANGED','page_reloaded'],
  ['Failed to create SingletonLock: File exists (17)','profile_busy'],
  ['The profile appears to be in use by another Chromium process on another computer','profile_busy'],
  ['The browser is already running for this userDataDir','profile_busy'],

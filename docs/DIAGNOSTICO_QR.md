@@ -4,6 +4,8 @@ O painel responder na porta 3000 confirma que o servidor está acessível. O QR 
 
 Se o painel mostra `profile_busy` e o log cita outro computador/contêiner, a versão **1.15.2** inclui um procedimento de recuperação que preserva a sessão e o banco. Veja [PERFIL_OCUPADO_E_CONEXAO.md](PERFIL_OCUPADO_E_CONEXAO.md). A manutenção exige que todas as instâncias que usam a sessão estejam paradas.
 
+A versão **1.15.3** trata `Socket` nulo e rejeições assíncronas durante navegação. Veja [AUTENTICACAO_E_NAVEGACAO.md](AUTENTICACAO_E_NAVEGACAO.md). Os códigos novos são `auth_modules` e `page_reloaded`; a sessão é preservada e a tela permite nova tentativa.
+
 ## Diagnóstico no Docker do computador
 
 Atualize o código na mesma instalação, mantendo `.env`, o projeto Compose, os ajustes próprios e o volume de dados. Recrie o serviço com `docker compose up -d --build cota` e atualize o painel com Ctrl+F5. Não use `down -v` nem apague `data`, o volume ou a sessão para tentar gerar um QR.
@@ -42,6 +44,8 @@ Se o diagnóstico temporário funcionar e o painel continuar falhando, confira o
 | `timeout` | Lentidão da rede, do host ou do Chromium. O carregamento de autenticação agora espera 90 segundos por padrão. |
 | `browser_dependencies` | Bibliotecas do Chromium ausentes; reconstrua a imagem fornecida. |
 | `browser_start` | Navegador encerrado ou falha de lançamento; o log identifica o detalhe. |
+| `auth_modules` | Componentes do WhatsApp indisponíveis durante a autenticação. A preparação tem limite; confira os logs e tente gerar o QR novamente. |
+| `page_reloaded` | Navegação interrompida durante a preparação. A tentativa termina sem encerrar o servidor e permite gerar o QR novamente. |
 | `initialization` | Falha não reconhecida. O log é necessário para determinar a causa. |
 
 Se houver apenas timeout e recursos/rede estiverem adequados, `WHATSAPP_AUTH_TIMEOUT_MS` permite ajustar a espera do carregamento da autenticação entre 30000 e 300000 ms. O Compose fornecido encaminha essa variável do `.env`. Valores inválidos usam 90000 ms. Isso não corrige falta de memória, DNS, certificados, permissões ou perfil ocupado.

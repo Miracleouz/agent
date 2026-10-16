@@ -8,9 +8,10 @@ import {WhatsAppSync} from './whatsapp-sync.js';
 import {WhatsAppReadSync} from './whatsapp-read.js';
 import {WhatsAppAvatars} from './whatsapp-avatars.js';
 import {sendConfirmed} from './whatsapp-send.js';
-const {Client,LocalAuth,MessageMedia}=wa;
+import {WhatsAppClient} from './whatsapp-client.js';
+const {LocalAuth,MessageMedia}=wa;
 export class WhatsApp {
- constructor(store,dataDir,{clientFactory=options=>new Client(options),logger=console}={}){this.store=store;this.dataDir=dataDir;this.clientFactory=clientFactory;this.logger=logger;this.client=null;this.status='disconnected';this.qr=null;this.error=null;this.number=null;this.receiver=null;this.generation=0;this.mediaTasks=new Set();this.syncer=new WhatsAppSync(this);this.readSync=new WhatsAppReadSync(this);this.avatars=new WhatsAppAvatars(this);}
+ constructor(store,dataDir,{clientFactory=options=>new WhatsAppClient(options),logger=console}={}){this.store=store;this.dataDir=dataDir;this.clientFactory=clientFactory;this.logger=logger;this.client=null;this.status='disconnected';this.qr=null;this.error=null;this.number=null;this.receiver=null;this.generation=0;this.mediaTasks=new Set();this.syncer=new WhatsAppSync(this);this.readSync=new WhatsAppReadSync(this);this.avatars=new WhatsAppAvatars(this);}
  snapshot(){return {status:this.status,qr:this.qr,error:this.error,number:this.number,transport:'qr',nativeButtons:false,sync:this.syncer.snapshot()};}
  update(status,error=null){if(status!=='ready'&&this.readSync?.pending.size)this.readSync.reset();this.status=status;this.error=error;if(status!=='ready')this.store.cancelFollowups(null,{whatsappOnly:true});this.store.changed();}
  connectionFailed(error){const diagnosis=connectionError(error);this.qr=null;this.number=null;this.update('error',`${diagnosis.message} Código: ${diagnosis.code}.`);this.store.event('whatsapp_error',this.error);this.logger.error(`[WhatsApp] ${diagnosis.code}: ${safeConnectionDetail(error)}`);}
@@ -31,10 +32,12 @@ export class WhatsApp {
   const proxy=process.env.HTTPS_PROXY||process.env.https_proxy;
   if(proxy){try{const url=new URL(proxy);args.push(`--proxy-server=${url.protocol}//${url.host}`);if(url.username)proxyAuthentication={username:decodeURIComponent(url.username),password:decodeURIComponent(url.password)};}catch{this.connectionFailed(new Error('Proxy configuration failed: endereço inválido.'));return this.snapshot();}}
   this.qr=null;this.number=null;this.update('starting');
-  let client;try{client=this.clientFactory({authStrategy:new LocalAuth({dataPath:join(this.dataDir,'whatsapp')}),authTimeoutMs:authenticationTimeout(process.env.WHATSAPP_AUTH_TIMEOUT_MS),puppeteer:{headless:true,executablePath,args},...(proxyAuthentication?{proxyAuthentication}:{}),webVersionCache:{type:'local',path:join(this.dataDir,'web-cache')}});}catch(error){this.connectionFailed(error);return this.snapshot();}
+  let client;try{client=this.clientFactory({authStrategy:new LocalAuth({dataPath:join(this.dataDir,'whatsapp')}),authTimeoutMs:authenticationTimeout(process.env.WHATSAPP_AUTH_TIMEOUT_MS),puppeteer:{headless:true,executablePath,args},...(proxyAuthentication?{proxyAuthentication}:{}),webVersionCache:{type:'none'}});}catch(error){this.connectionFailed(error);return this.snapshot();}
   let readyAt=null;
   this.client=client;
   this.readSync.register(client,generation);
+  client.on('cota_reloading',()=>{if(this.generation!==generation||this.client!==client||this.status==='error')return;readyAt=null;this.readyAt=null;this.syncer.reset();this.readSync.reset();this.avatars.reset();this.qr=null;this.number=null;this.update('starting');});
+  client.on('cota_connection_error',error=>{if(this.generation!==generation||this.client!==client||this.status==='error')return;this.syncer.reset();this.readSync.reset();this.avatars.reset();this.connectionFailed(error);Promise.resolve().then(()=>client.destroy()).catch(()=>{});});
   client.on('qr',async code=>{try{const qr=await QRCode.toDataURL(code,{width:300,margin:2});if(this.generation!==generation||this.status==='error')return;this.qr=qr;this.update('qr');}catch(error){if(this.generation===generation&&this.status!=='error')this.connectionFailed(error);}});
   client.on('authenticated',()=>{if(this.generation!==generation||this.status==='error')return;this.qr=null;this.update('authenticated');});
   client.on('ready',()=>{if(this.generation!==generation||this.status==='error')return;readyAt=Math.floor(Date.now()/1000);this.readyAt=readyAt;this.qr=null;this.number=client.info?.wid?.user||null;this.update('ready');this.store.event('whatsapp','WhatsApp conectado.');this.syncer.run().catch(error=>{if(this.generation===generation)this.syncer.report(error);});});
