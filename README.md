@@ -8,6 +8,7 @@ Painel do dono para uma loja de correias industriais, abertas e sincronizadoras.
 - Caixa de entrada com aparência do WhatsApp, busca, filtros, histórico e atualização em tempo real. Clientes de teste são identificados e os totais de WhatsApp excluem simulações.
 - **Responder manual** pausa somente o chat escolhido por 5–120 minutos ou até reativação. O prazo padrão pode ser configurado. O agente volta para novas mensagens, sem responder retroativamente às antigas.
 - **Falar com atendente** destaca o chat com uma exclamação, confirma a transferência uma vez e pausa até reativação explícita. Áudios e anexos também são encaminhados a uma pessoa.
+- **Cotação ou compra:** reconhece pedidos de preço e orçamento, intenção de fechar uma compra, abreviações e erros comuns de escrita. Negação, pesquisa e perguntas de preço evitam um encaminhamento prematuro. Uma escolha ambígua, como apenas `2` ou `pode ser`, pede confirmação. `Quero a segunda`, `pode separar` e `quero fechar` geram o alerta **Quer fechar pedido** e pausam somente esse chat. O dono vê a opção e a cotação de referência; confirma itens, medidas, disponibilidade e pagamento antes de finalizar. O agente não confirma a venda nem reserva estoque.
 - Cotação com até cinco opções reais, priorizando marcas diferentes e preços menores, sem substituir outra referência para completar a lista. **MAIS** pagina sem repetir produtos já mostrados. Estoque insuficiente é informado; itens sem preço ficam sob consulta.
 - Busca local com normalização de acentos, palavras usuais, plurais, pequenas variações de escrita, referência e números. Exemplos: `A42`, `A-42`, `A 42`; correias dentadas/sincronizadoras; filtros de marca e `até R$ 50`. Segue o contexto para marca ou orçamento. Não depende de uma API de IA paga, nem é um modelo de linguagem generalista.
 - Importação de CSV/Excel com prévia e confirmação antes da substituição. Sincronização manual ou agendada com Google Sheets. Arquivos inválidos preservam o catálogo existente. Produtos sem SKU recebem identificador estável; linhas idênticas sem SKU são agregadas apenas quando descrição, marca, medida, preço e unidade coincidem.
@@ -86,11 +87,14 @@ O agente pergunta medidas faltantes e mantém a referência no contexto. Sincron
 
 ```bash
 npm test
+npm run test:intents
 npm run build
 npm run test:ui
 ```
 
 Os testes de navegador usam o Chromium local (`CHROME_PATH` pode sobrescrever) e um servidor/banco temporário isolado na porta 3101. Cobrem cadastro, cinco opções, paginação, alerta de atendente, resposta manual, reativação, importação confirmada e layout móvel. Não dependem de um número de WhatsApp nem enviam mensagens a clientes. A geração de um QR real foi validada separadamente; pareamento e entrega a um contato real dependem da leitura pelo dono e não foram feitos automaticamente.
+
+A bateria de intenções exercita **180 mensagens diferentes** pelo fluxo completo do agente, com expectativas escritas nos testes. Inclui cotação, compra, negação, condição, abreviações, erros de escrita e respostas ambíguas. Veja o [relatório dos testes de intenção](docs/TESTES_INTENCOES.md). Esses resultados cobrem os casos do corpus; a interpretação usa regras locais e não garante entendimento de qualquer frase possível.
 
 As dependências estão fixadas pelo lockfile. O override de `@puppeteer/browsers` evita dependências de extração antigas; a inicialização do Chromium pelo Puppeteer e a geração real do QR foram verificadas com ele. O override de UUID mantém uma versão corrigida compatível com ExcelJS. O navegador é fornecido pelo sistema, sem downloads automáticos de Chrome pelo npm.
 

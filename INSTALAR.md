@@ -73,6 +73,8 @@ Mantenha o mesmo nome e caminho da pasta da instalação: o Docker Compose usa o
 
 Esta atualização impede que notificações internas do WhatsApp sejam confundidas com mensagens de clientes. O agente também ignora histórico anterior à conexão e respeita a pausa manual e o desligamento global ao confirmar pedidos de atendente. Se uma conversa recebeu um alerta indevido na versão anterior, confira o histórico e use a opção de reativar o agente nessa conversa; os alertas existentes são preservados.
 
+A versão 1.1.0 também distingue cotação de intenção de compra. Ao reconhecer uma compra, exibe **Quer fechar pedido** e o resumo no painel, pausando somente aquela conversa para a equipe confirmar os detalhes. Respostas ambíguas pedem confirmação; a venda não é concluída automaticamente. A atualização adiciona os campos necessários ao banco e preserva o histórico existente.
+
 ## Cotações configuradas
 
 - **Abertas:** `(preço por metro da faixa inteira ÷ largura cadastrada em mm) × comprimento pedido em metros × largura pedida em mm`.

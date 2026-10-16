@@ -47,3 +47,20 @@ test('open belt uses length times width and synchronous belt asks specifically f
  await send('correia 1304 8M');await expect(page.locator('.message-body').last()).toContainText('Qual é a largura de corte');
  await send('20');await expect(page.locator('.message-body').last()).toContainText('95,00 por correia');await expect(page.locator('.message-body').last()).toContainText('20 mm de largura');
 });
+
+test('owner sees purchase intent only after an ambiguous choice is confirmed',async({page})=>{
+ await page.goto('/');await page.getByLabel('E-mail',{exact:true}).fill('marina@example.test');await page.getByLabel('Senha',{exact:true}).fill('owner-pass-test-123');await page.getByRole('button',{name:'Entrar no painel',exact:true}).click();
+ await page.getByRole('button',{name:'Estoque',exact:true}).click();
+ const csv='sku;produto;marca;medida;preco;quantidade\nG42;Correia em V;Gates;A42;39,90;12\nO42;Correia em V;Optibelt;A42;55,90;12';
+ await page.getByLabel('Importar estoque').setInputFiles({name:'compra.csv',mimeType:'text/csv',buffer:Buffer.from(csv)});await page.getByRole('button',{name:'Substituir estoque',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
+ await page.getByRole('button',{name:'Conversas',exact:true}).click();
+ async function send(body){await page.getByRole('button',{name:'Testar agente',exact:true}).click();await page.getByRole('dialog').getByRole('combobox').selectOption('demo-outro');await page.getByLabel('Mensagem do cliente').fill(body);await page.getByRole('button',{name:'Enviar teste',exact:true}).click();}
+ await send('qro cotacao A42 pfv');await expect(page.locator('.message-body').last()).toContainText('2 opções');
+ await send('2');await expect(page.locator('.message-body').last()).toContainText('COTAR');await expect(page.locator('.chat-notice')).toContainText('O agente responde');
+ await send('qro fexar o pedidu');await expect(page.locator('.chat-notice')).toContainText('Cliente quer fechar pedido');
+ await expect(page.locator('.chat-tag').filter({hasText:'Quer fechar pedido'})).toBeVisible();
+ await expect(page.locator('.purchase-summary')).toContainText('Opção 2: Optibelt');await expect(page.locator('.purchase-summary')).toContainText('55,90');
+ await expect(page.locator('.message-body').last()).toContainText('ainda não está confirmado');
+ await page.screenshot({path:'test-results/purchase-intent.png',fullPage:true});
+ await page.getByRole('button',{name:'Reativar agente'}).click();await expect(page.locator('.purchase-summary')).toHaveCount(0);await expect(page.getByRole('button',{name:'Responder manual',exact:true})).toBeVisible();
+});

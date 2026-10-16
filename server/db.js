@@ -21,6 +21,9 @@ export class Store extends EventEmitter {
    CREATE TABLE IF NOT EXISTS events(id TEXT PRIMARY KEY, kind TEXT NOT NULL, detail TEXT NOT NULL, created INTEGER NOT NULL);
   `);
   if(!this.all('PRAGMA table_info(chats)').some(column=>column.name==='pending_measure'))this.db.exec('ALTER TABLE chats ADD COLUMN pending_measure TEXT');
+  for(const [name,type] of [['quoted_options',"TEXT NOT NULL DEFAULT '[]'"],['pending_selection','INTEGER'],['handoff_reason','TEXT'],['purchase_summary','TEXT']]){
+   if(!this.all('PRAGMA table_info(chats)').some(column=>column.name===name))this.db.exec(`ALTER TABLE chats ADD COLUMN ${name} ${type}`);
+  }
   this.db.prepare('INSERT OR IGNORE INTO settings VALUES(1,?)').run(JSON.stringify({priceMode:'sale',markupPercent:0,mmDimension:'width',openBeltPriceBasis:'per_meter_full_width',businessName:'Minha loja',pauseMinutes:30,sheetUrl:DEFAULT_SHEET,syncMinutes:0,agentEnabled:true,lastSync:null}));
   this.db.prepare("UPDATE messages SET status='failed',error='Envio interrompido pelo reinício. Confira no WhatsApp antes de reenviar.' WHERE status='pending'").run();
  }
@@ -33,7 +36,7 @@ export class Store extends EventEmitter {
  setSettings(patch){const s={...this.settings(),...patch};this.run('UPDATE settings SET value=? WHERE id=1',JSON.stringify(s));this.changed();return s;}
  event(kind,detail){this.run('INSERT INTO events VALUES(?,?,?,?)',randomUUID(),kind,detail,Date.now());this.changed();}
  chat(id){const c=this.get('SELECT * FROM chats WHERE id=?',id);return c?{...c,shown:JSON.parse(c.shown)}:null;}
- resumeExpired(){const r=this.run("UPDATE chats SET mode='auto',pause_until=NULL,needs_human=0 WHERE mode='manual' AND pause_until IS NOT NULL AND pause_until<=?",Date.now());if(r.changes)this.changed();}
+ resumeExpired(){const r=this.run("UPDATE chats SET mode='auto',pause_until=NULL,needs_human=0,handoff_reason=NULL,purchase_summary=NULL WHERE mode='manual' AND pause_until IS NOT NULL AND pause_until<=?",Date.now());if(r.changes)this.changed();}
  chats(){this.resumeExpired();return this.all(`SELECT c.*, (SELECT body FROM messages WHERE chat_id=c.id ORDER BY created DESC,rowid DESC LIMIT 1) AS preview FROM chats c ORDER BY updated DESC`).map(c=>({...c,shown:JSON.parse(c.shown)}));}
  messages(id){return this.all('SELECT * FROM messages WHERE chat_id=? ORDER BY created,rowid',id).map(m=>({...m,actions:JSON.parse(m.actions)}));}
  addMessage({chatId,providerId=null,direction,body,actions=[],status='received'}){
@@ -41,7 +44,7 @@ export class Store extends EventEmitter {
   this.run('UPDATE chats SET updated=? WHERE id=?',now,chatId);this.changed();return this.get('SELECT * FROM messages WHERE id=?',id);
  }
  pause(id,minutes){this.run("UPDATE chats SET mode='manual',pause_until=? WHERE id=?",minutes?Date.now()+minutes*60000:null,id);this.changed();return this.chat(id);}
- resume(id){this.run("UPDATE chats SET mode='auto',pause_until=NULL,needs_human=0 WHERE id=?",id);this.changed();return this.chat(id);}
+ resume(id){this.run("UPDATE chats SET mode='auto',pause_until=NULL,needs_human=0,handoff_reason=NULL,purchase_summary=NULL,pending_selection=NULL WHERE id=?",id);this.changed();return this.chat(id);}
  stats(){return {products:this.get('SELECT count(*) n FROM products WHERE quantity>0 AND price>0').n,conversations:this.get("SELECT count(*) n FROM chats WHERE channel='whatsapp'").n,replies:this.get("SELECT count(*) n FROM messages m JOIN chats c ON c.id=m.chat_id WHERE m.direction='bot' AND m.status='sent' AND c.channel='whatsapp'").n,waiting:this.get('SELECT count(*) n FROM chats WHERE needs_human=1').n};}
  close(){this.db.close();}
 }
