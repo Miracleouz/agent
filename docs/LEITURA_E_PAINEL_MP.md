@@ -1,4 +1,4 @@
-# Leitura sincronizada, atendimento compartilhado e painel MP — 1.14.0
+# Leitura sincronizada, atendimento compartilhado e painel MP — 1.14.1
 
 Ao abrir uma conversa, o painel antes limpava somente seu contador local. A marcação podia continuar no celular e os checks não distinguiam envio, entrega e leitura. Agora esses estados acompanham os eventos disponibilizados pela conexão WhatsApp Web.
 
@@ -27,7 +27,7 @@ O atendimento compartilha um único número conectado por QR e um banco central.
 
 As abas são **Conversas · nome**, **Não lidas**, **Histórico**, **Grupos** e, para Admin, **Todos os atendimentos**. Uma conversa atendida e lida pode estar em Histórico; não precisa continuar como não lida para estar acessível à equipe. Os controles de transferência e envio continuam verificando a responsabilidade no servidor, inclusive se dois usuários agirem ao mesmo tempo.
 
-O painel usa navegação lateral em telas grandes e mantém o campo de resposta acessível acima da navegação no celular. O nome da loja configurado é preservado. A identificação **MP Correias** e o monograma MP em texto são provisórios: o arquivo do logo oficial ainda não foi anexado nesta etapa.
+O painel usa navegação lateral em telas grandes e mantém o campo de resposta acessível acima da navegação no celular. O nome da loja configurado é preservado. A identificação **MP Correias** e o monograma MP permanecem em texto. A entrega não depende do logo oficial, conforme a preferência informada.
 
 ## Vocabulário e cotações
 
@@ -37,7 +37,7 @@ As fórmulas anteriores permanecem: peça pronta tem preço fechado; frisos/cana
 
 ## Verificação
 
-Em 16/10/2026, passaram **3.136 testes de servidor**, **24 testes de navegador** e o build de produção. Foram acrescentados:
+Na versão final **1.14.1**, em 16/10/2026, passaram **3.136 testes de servidor**, **24 testes de navegador** e o build de produção. Foram acrescentados:
 
 - **300 combinações** de cinco perfis, dez mensagens com variações e seis fluxos: abrir/ler; responder com ROBINHO; responder com texto/foto assinada; ler pelo celular/alias; falhar e tentar a leitura novamente; receber mensagem durante a confirmação.
 - **Seis casos** de permissões, grupos, timeout/desconexão, eventos antigos/forjados, nova mensagem durante a consulta das listas e bloqueio de endereços arbitrários.

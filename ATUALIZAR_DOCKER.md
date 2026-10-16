@@ -1,4 +1,6 @@
-# Atualizar para a versão 1.14.0 no Docker
+# Atualizar para a versão 1.14.1 no Docker
+
+A versão 1.14.1 mantém a identificação do painel em texto e não depende de um arquivo de logo.
 
 Use a instalação que já está funcionando. O ZIP contém o código; estoque, usuários, conversas e sessão do WhatsApp permanecem no volume existente.
 
@@ -10,7 +12,7 @@ Use a instalação que já está funcionando. O ZIP contém o código; estoque, 
 docker compose stop cota
 ```
 
-4. Copie o conteúdo da pasta extraída (`agent-<código>` no download do GitHub ou `cota-whatsapp-1.14.0` no pacote local) para a pasta da instalação atual, substituindo os arquivos do código. O `compose.yaml`, o `Dockerfile`, `server` e `src` devem ficar diretamente na pasta atual, sem criar outra pasta dentro dela. Preserve seu `.env`, dados locais e eventuais ajustes próprios de porta, domínio ou volumes no `compose.yaml`.
+4. Copie o conteúdo da pasta extraída (`agent-<código>` no download do GitHub ou `cota-whatsapp-1.14.1` no pacote local) para a pasta da instalação atual, substituindo os arquivos do código. O `compose.yaml`, o `Dockerfile`, `server` e `src` devem ficar diretamente na pasta atual, sem criar outra pasta dentro dela. Preserve seu `.env`, dados locais e eventuais ajustes próprios de porta, domínio ou volumes no `compose.yaml`.
 5. Na mesma pasta e usando o mesmo projeto Compose da instalação anterior, execute:
 
 ```powershell
@@ -32,7 +34,7 @@ docker compose logs --tail=100 cota
 docker compose exec cota node -p "require('./package.json').version"
 ```
 
-Deve mostrar `1.14.0`.
+Deve mostrar `1.14.1`.
 
 8. Abra o endereço que você já usa para acessar o painel e pressione **Ctrl+F5**. Na instalação local padrão, o endereço digitado no navegador é `localhost:3000`. Use **Testar agente** para conferir a atualização. Teste `vou mandar o motorista`: deve pedir nome de quem vai retirar e nome da empresa. Repetir a frase no mesmo chat em menos de 24 horas não deve repetir a pergunta.
 
