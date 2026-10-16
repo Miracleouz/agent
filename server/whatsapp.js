@@ -2,9 +2,10 @@ import wa from 'whatsapp-web.js';
 import QRCode from 'qrcode';
 import {existsSync} from 'node:fs';
 import {join} from 'node:path';
-const {Client,LocalAuth}=wa;
+import {photoInfo,maxPhotoBytes} from './images.js';
+const {Client,LocalAuth,MessageMedia}=wa;
 export class WhatsApp {
- constructor(store,dataDir,{clientFactory=options=>new Client(options)}={}){this.store=store;this.dataDir=dataDir;this.clientFactory=clientFactory;this.client=null;this.status='disconnected';this.qr=null;this.error=null;this.number=null;this.receiver=null;this.generation=0;}
+ constructor(store,dataDir,{clientFactory=options=>new Client(options)}={}){this.store=store;this.dataDir=dataDir;this.clientFactory=clientFactory;this.client=null;this.status='disconnected';this.qr=null;this.error=null;this.number=null;this.receiver=null;this.generation=0;this.mediaTasks=new Set();}
  snapshot(){return {status:this.status,qr:this.qr,error:this.error,number:this.number,transport:'qr',nativeButtons:false};}
  update(status,error=null){this.status=status;this.error=error;if(status!=='ready')this.store.cancelFollowups(null,{whatsappOnly:true});this.store.changed();}
  async connect(){
@@ -40,7 +41,16 @@ export class WhatsApp {
    if(typeof body!=='string'||!body.trim())return;
    if(group){this.store.addGroupMessage({id:message.from,providerId:message.id._serialized,author:message._data?.notifyName||message.author?.replace(/@.*$/,'')||'Participante',body:attachment?'[Áudio ou anexo recebido no grupo]':body,created:message.timestamp*1000});return;}
    const mapped=this.store.get("SELECT c.phone FROM whatsapp_chat_aliases a JOIN chats c ON c.id=a.chat_id WHERE a.alias=? AND c.channel='whatsapp' AND c.provider='qr'",message.from);
-   this.receiver?.({phone:mapped?.phone||message.from,name:message._data?.notifyName||message.from.replace(/@.*$/,''),body,forceHuman:attachment,providerId:message.id._serialized,channel:'whatsapp',provider:'qr'}).catch(()=>this.store.event('error','Falha no processamento de uma mensagem recebida. Verifique a conversa.'));
+   const processing=this.receiver?.({phone:mapped?.phone||message.from,name:message._data?.notifyName||message.from.replace(/@.*$/,''),body,forceHuman:attachment,providerId:message.id._serialized,channel:'whatsapp',provider:'qr'});
+   processing?.catch(()=>{if(this.generation===generation)this.store.event('error','Falha no processamento de uma mensagem recebida. Verifique a conversa.');});
+   if(message.type==='image'&&typeof message.downloadMedia==='function'&&processing){
+    const task=processing.then(async result=>{
+     if(!result.chatId||result.duplicate||result.ignored)return;
+     const media=await message.downloadMedia();if(this.generation!==generation||this.client!==client||!media?.data||media.data.length>Math.ceil(maxPhotoBytes*4/3)+4)return;
+     const data=Buffer.from(media.data,'base64'),info=photoInfo(data);
+     this.store.run("UPDATE messages SET media_type=?,media_name=?,media_size=?,media_data=?,body=? WHERE provider_id=? AND chat_id=? AND direction='in' AND inbound_verified=1",info.type,'foto.'+info.extension,data.length,data,String(message.body||'').slice(0,4000),message.id._serialized,result.chatId);this.store.changed();
+    }).catch(()=>{});this.mediaTasks.add(task);task.finally(()=>this.mediaTasks.delete(task));
+   }
   });
   client.initialize().catch(()=>{if(this.generation===generation)this.update('error','Não foi possível abrir o WhatsApp Web. Verifique a rede, a liberação de web.whatsapp.com e tente reconectar.');});
   return this.snapshot();
@@ -69,6 +79,26 @@ export class WhatsApp {
   if(aliases.includes(client.info?.wid?._serialized)||aliases.includes(client.info?.lid?._serialized))throw Object.assign(new Error('Escolha o WhatsApp de um cliente, diferente do número da loja.'),{status:400});
   return{id,aliases};
  }
+ async sendPhoto(chat,photo,caption){
+  if(this.status!=='ready'||!this.client)throw new Error('WhatsApp desconectado.');
+  if(!/^\d+@(c\.us|lid|s\.whatsapp\.net)$/.test(chat.phone))throw new Error('O envio para grupos é bloqueado.');
+  const info=photoInfo(photo.data);if(info.type!==photo.type)throw new Error('Foto inválida.');
+  const media=new MessageMedia(info.type,photo.data.toString('base64'),photo.name);
+  const result=await this.client.sendMessage(chat.phone,media,{caption});if(!result?.id?._serialized)throw new Error('Não foi possível confirmar o envio da foto.');return result.id._serialized;
+ }
+ async editMessage(chat,providerId,body){
+  const denied=message=>Object.assign(new Error(message),{definite:true});
+  if(this.status!=='ready'||!this.client)throw denied('WhatsApp desconectado.');
+  if(!/^\d+@(c\.us|lid|s\.whatsapp\.net)$/.test(chat.phone))throw denied('Edição em grupos bloqueada.');
+  const client=this.client,generation=this.generation,message=await client.getMessageById(providerId);
+  if(this.client!==client||this.generation!==generation||this.status!=='ready')throw denied('O WhatsApp desconectou.');
+  if(!message?.fromMe||message.id?._serialized!==providerId)throw denied('Mensagem enviada não encontrada.');
+  const mapped=this.store.get('SELECT chat_id FROM whatsapp_chat_aliases WHERE alias=?',message.to||'');
+  if(message.to!==chat.phone&&mapped?.chat_id!==chat.id)throw denied('O destinatário da mensagem não corresponde à conversa.');
+  const edited=await message.edit(body,{linkPreview:false});if(!edited)throw denied('O WhatsApp não permitiu esta edição.');
+  if(edited.id?._serialized!==providerId)throw new Error('Não foi possível confirmar a edição.');return providerId;
+ }
+ async drainMedia(){await Promise.allSettled([...this.mediaTasks]);}
  async disconnect(){++this.generation;const client=this.client;this.client=null;if(client){try{if(this.status==='ready')await client.logout();}catch{}await client.destroy().catch(()=>{});}this.qr=null;this.number=null;this.update('disconnected');}
  async close(){++this.generation;if(this.client)await this.client.destroy().catch(()=>{});}
 }

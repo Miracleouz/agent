@@ -73,6 +73,19 @@ O lote aceita até 50 pessoas e só é aplicado se todos os registros forem vál
 
 A agenda é compartilhada pela equipe. Admin e Comercial podem cadastrar, editar e buscar. Só Admin pode excluir um cadastro; excluir não apaga as mensagens. Os limites de acesso aos chats permanecem: Comercial não abre conversa de outro responsável; Admin pode observar e transferir pelos controles existentes. **Liberar conversa** permite que outra pessoa assuma.
 
+## Histórico, envio de fotos e edição
+
+O histórico fica no banco do servidor, incluindo fotos, autores e registros de edição. Pode fechar o painel, sair da conta e entrar novamente: as conversas continuam disponíveis conforme suas permissões. Ao transferir, o novo responsável recebe o histórico completo já registrado e os Admins continuam podendo consultá-lo. O Comercial anterior deixa de ter acesso à conversa transferida; as mensagens que ele enviou mantêm seu nome.
+
+1. Abra uma conversa sob sua responsabilidade em **Responder manual** e clique no ícone **Enviar foto**, ao lado do campo de texto.
+2. Escolha um JPEG, PNG ou WebP de até **8 MB**, confira a prévia e escreva uma legenda opcional. Só o botão **Enviar foto** confirma o envio. A assinatura do atendente segue as Configurações.
+3. Para corrigir uma mensagem enviada pelo painel, clique em **Editar** abaixo dela e salve o texto ou a legenda. O prazo é de **15 minutos desde o envio original**, sujeito à aceitação do WhatsApp. Editar não envia outra mensagem e não renova esse prazo. A imagem enviada não é substituída pela edição da legenda.
+4. Use **Ver edições** para consultar o texto anterior, o novo e o nome de quem editou. Comercial só edita suas próprias mensagens no chat sob sua responsabilidade. Admin pode editar mensagens de outros atendentes depois de assumir o chat.
+
+Falhas de envio ou edições sem confirmação aparecem no painel e não são repetidas automaticamente. Confira o WhatsApp antes de tentar novamente. Fotos recebidas após a conexão aparecem quando o download disponibilizado pelo WhatsApp funciona; não há importação do histórico antigo nem download de anexos de grupos.
+
+Fechar apenas o navegador não interrompe o servidor. Para continuar recebendo mensagens e respondendo pelo agente, mantenha o computador/host e o serviço em execução. No Docker, preserve o volume existente **cota-data**: fotos e edições ficam no mesmo banco do histórico, sem necessidade de outro volume. Faça backup com o serviço parado, copiando todo o diretório de dados.
+
 ## Comandos do dia a dia
 
 Iniciar novamente, sem reconstruir a imagem:
@@ -137,6 +150,8 @@ A versão **1.8.0** reconhece o cliente enviando motorista, motoboy, Uber ou 99 
 A versão **1.9.0** substitui o menu antigo de cinco minutos por **encerramento por inatividade**: após cinco minutos sem resposta no atendimento automático, avisa o cliente uma vez e encerra. Uma nova mensagem válida reinicia o prazo; só uma nova solicitação do cliente pode reabrir a conversa depois de encerrada. O prazo é fixo e aparece em Configurações. Atendimentos assumidos ou encaminhados para pessoas continuam sob controle da equipe. A coleta de envio após três minutos do interesse de compra continua separada. Cadastro, histórico importado, QR e reinício não iniciam conversas nem disparam avisos antigos. A migração adiciona campos de verificação sem apagar estoque, usuários ou histórico; nenhuma mensagem antiga é marcada como nova.
 
 A versão **1.10.0** adiciona a agenda **Contatos** e o início de conversa manual pelo usuário, com assinatura, responsabilidade exclusiva por chat e verificação do número no WhatsApp conectado. O bot continua sem autorização para primeiro contato automático. A migração cria tabelas de agenda e vínculos de identificação, preservando os dados anteriores.
+
+A versão **1.11.0** adiciona envio de fotos e edição de textos/legendas pelo painel multiusuário, com registro das versões anteriores. A migração acrescenta campos de mídia e auditoria ao banco existente, preservando mensagens, estoque, usuários e sessão. O histórico registrado permanece após fechar o painel, transferir o atendimento ou reiniciar o servidor usando o mesmo volume.
 
 ## Cotações configuradas
 
