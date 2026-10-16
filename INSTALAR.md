@@ -58,6 +58,21 @@ docker compose stop
 
 Não exclua o volume `cota-data`: ele guarda os dados e a sessão. Atualizar a aplicação com `docker compose up -d --build` preserva o volume. A publicação do ambiente na nuvem é separada da instalação e hospedagem da aplicação.
 
+## Atualizar uma instalação existente
+
+1. Baixe o [ZIP atualizado](https://github.com/Miracleouz/agent/archive/refs/heads/main.zip) e extraia em uma pasta temporária.
+2. Na **pasta da instalação atual**, execute `docker compose stop`.
+3. Copie os arquivos extraídos para essa mesma pasta da instalação, substituindo os arquivos do código. Preserve seu `.env`, caso exista, e a pasta `data`, caso use instalação com Node.js.
+4. Ainda na pasta da instalação atual, execute:
+
+```powershell
+docker compose up -d --build
+```
+
+Mantenha o mesmo nome e caminho da pasta da instalação: o Docker Compose usa o nome do projeto para localizar o volume existente. Não execute `docker compose down -v` nem remova o volume. Seu estoque, usuário, histórico e sessão permanecem nesse volume.
+
+Esta atualização impede que notificações internas do WhatsApp sejam confundidas com mensagens de clientes. O agente também ignora histórico anterior à conexão e respeita a pausa manual e o desligamento global ao confirmar pedidos de atendente. Se uma conversa recebeu um alerta indevido na versão anterior, confira o histórico e use a opção de reativar o agente nessa conversa; os alertas existentes são preservados.
+
 ## Cotações configuradas
 
 - **Abertas:** `(preço por metro da faixa inteira ÷ largura cadastrada em mm) × comprimento pedido em metros × largura pedida em mm`.

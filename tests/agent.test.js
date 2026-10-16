@@ -33,6 +33,20 @@ test('brand and budget follow-ups retain the belt reference',async t=>{
 test('unsupported media is routed to a human and never parsed as a product request',async t=>{
  const{store,agent}=fixture(t);const r=await agent.receive(incoming('[Áudio recebido]',undefined,{forceHuman:true}));assert.equal(store.chat(r.chatId).needs_human,1);assert.equal(store.chat(r.chatId).mode,'manual');
 });
+test('manual takeover records attendant requests without sending an automatic acknowledgment',async t=>{
+ const{store,agent,sent}=fixture(t);replaceCatalog(store,demoProducts,'test');
+ const r=await agent.receive(incoming('A42'));store.pause(r.chatId,30);const count=sent.length;
+ await agent.receive(incoming('ATENDENTE'));
+ assert.equal(sent.length,count);assert.equal(store.chat(r.chatId).needs_human,1);assert.equal(store.chat(r.chatId).mode,'manual');
+});
+test('globally disabled agent never acknowledges handoffs but retains the owner alert',async t=>{
+ const{store,agent,sent}=fixture(t);store.setSettings({agentEnabled:false});
+ for(const extra of [{},{forceHuman:true}]){
+  const r=await agent.receive(incoming('ATENDENTE',extra.forceHuman?'5522@c.us':'5511@c.us',extra));
+  assert.equal(store.chat(r.chatId).needs_human,1);assert.equal(store.chat(r.chatId).mode,'manual');
+ }
+ assert.equal(sent.length,0);
+});
 test('stock without a price requests human verification instead of declaring it unavailable',async t=>{
  const{store,agent,sent}=fixture(t);replaceCatalog(store,[{...demoProducts[0],price:null}],'test');const r=await agent.receive(incoming('A42'));assert.equal(store.chat(r.chatId).needs_human,1);assert.match(sent[0][1],/preço está sob consulta/);assert(!sent[0][1].includes('R$'));
 });
