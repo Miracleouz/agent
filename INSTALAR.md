@@ -37,7 +37,18 @@ Instale o agente **uma vez**, no computador ou servidor que ficará ligado. Todo
 
 Na rede da loja, use o IP do servidor, por exemplo `http://192.168.1.50:3000`, substituindo pelo endereço real. No Windows, `ipconfig` mostra o endereço IPv4. Libere a porta 3000 no firewall para a rede local. Nos computadores dos atendentes, `localhost:3000` não acessa o servidor da loja. Se utilizar `APP_URL`, ela deve corresponder à URL que todos usam. Para acesso externo, configure domínio e HTTPS.
 
-Um Admin cadastra as contas em **Equipe**, com senha de pelo menos dez caracteres, e informa o acesso a cada pessoa. A aplicação não envia senhas por e-mail. **Admin** vê todos os chats, gerencia estoque, QR, configurações e acessos e pode transferir atendimentos. **Comercial** vê seus próprios chats e a fila sem responsável, assume um chat antes de responder e pode trocar a própria senha em **Configurações**. Os filtros **Meus**, **Fila** e **Aguardando** organizam os atendimentos.
+Um Admin cadastra as contas em **Equipe**, com senha de pelo menos dez caracteres, e informa o acesso a cada pessoa. A aplicação não envia senhas por e-mail. **Admin** vê todos os chats, gerencia estoque, QR, configurações e acessos e pode transferir atendimentos. **Comercial** vê seus próprios chats e a fila sem responsável e pode trocar a própria senha em **Configurações**.
+
+As abas de atendimento são:
+
+- **Conversas · seu nome:** atendimentos que estão com você, incluindo novas mensagens desses clientes.
+- **Não lidas:** fila compartilhada de conversas sem responsável. Clique para assumir automaticamente; a conversa sai dessa fila e abre na sua aba pessoal, com o bot pausado. Outro Comercial deixa de vê-la.
+- **Grupos:** lista e novas mensagens para consulta, sem respostas automáticas ou manuais pelo painel. A lista carrega ao conectar o WhatsApp. O histórico anterior à conexão não é importado, e anexos aparecem como aviso sem download.
+- **Todos os atendimentos:** visão adicional do Admin. Abrir uma conversa de outro responsável permite acompanhar, sem tomar o atendimento nem limpar as mensagens não lidas dele.
+
+Para devolver um chat à equipe, use **Liberar conversa**. Ele sai da sua aba pessoal e volta para **Não lidas**, disponível aos outros usuários. O histórico, o pedido e os alertas são mantidos. A liberação não envia mensagem e deixa o bot pausado aguardando a equipe; não agenda lembretes. A palavra Não lidas identifica a fila de trabalho: uma conversa liberada volta para lá mesmo se o histórico já foi lido.
+
+**Reativar agente** volta a permitir respostas a novas mensagens, mantendo a conversa com o responsável. O fim de uma pausa temporária também mantém esse responsável. Para disponibilizar aos outros, use **Liberar conversa** ou uma transferência por Admin. Se dois usuários abrirem o mesmo chat juntos, apenas um assume; o outro Comercial recebe aviso de que a conversa já foi assumida.
 
 Ao digitar no painel, o nome aparece para os colegas. O cliente recebe a resposta assinada, por exemplo **Carla Lima: Olá, vou te atender.** O padrão é assinar; o dono pode alterar em **Configurações → Assinar mensagens no WhatsApp com o nome do atendente**. Cada chat tem um responsável por vez; o dono pode transferi-lo para si usando **Assumir atendimento**.
 
@@ -105,6 +116,8 @@ A versão 1.3.0 adiciona a apresentação fixa do **ROBINHO** uma vez a cada 24 
 A versão **1.4.0** adiciona contas da equipe, digitação identificada, assinaturas nas respostas, responsável por chat e alertas separados de compra, pedido fechado e solicitação de atendente. Aceita **MT, MTS, METRO e METROS** para comprimento. A conta e senha atuais do dono continuam válidas, e os alertas existentes de compra/atendente são migrados. A criação de usuários e a marcação interna de pedido fechado não enviam mensagens a clientes. Depois de atualizar, entre com a conta do dono e cadastre os demais acessos em **Equipe**.
 
 A versão **1.5.0** permite vários **Admins**, cargo **Comercial**, edição de cargos, cadastro em lote e transferências de chats entre usuários. O dono da versão anterior passa a **Admin**; os atendentes passam a **Comercial**, mantendo senhas, identificadores e histórico. Comerciais passam a ver seus próprios atendimentos e a fila sem responsável. Admins veem todos. Mudanças posteriores de cargo encerram as sessões do usuário alterado. É necessário manter pelo menos um Admin ativo.
+
+A versão **1.6.0** adiciona as abas por usuário, Não lidas e Grupos, tomada automática ao abrir e **Liberar conversa**. A migração mantém os responsáveis já cadastrados. Novas tomadas automáticas não expiram; as pausas temporárias existentes continuam podendo reativar o bot, sem liberar o responsável. A atualização não envia mensagens a clientes nem importa mensagens antigas de grupos. Foram executados 200 cenários novos do fluxo de atendimento, além das regressões anteriores.
 
 ## Cotações configuradas
 

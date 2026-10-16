@@ -22,12 +22,13 @@ export class WhatsApp {
   this.client=client;
   client.on('qr',async code=>{const qr=await QRCode.toDataURL(code,{width:300,margin:2});if(this.generation!==generation)return;this.qr=qr;this.update('qr');});
   client.on('authenticated',()=>{if(this.generation!==generation)return;this.qr=null;this.update('authenticated');});
-  client.on('ready',()=>{if(this.generation!==generation)return;readyAt=Math.floor(Date.now()/1000);this.qr=null;this.number=client.info?.wid?.user||null;this.update('ready');this.store.event('whatsapp','WhatsApp conectado.');});
+  client.on('ready',()=>{if(this.generation!==generation)return;readyAt=Math.floor(Date.now()/1000);this.qr=null;this.number=client.info?.wid?.user||null;this.update('ready');this.store.event('whatsapp','WhatsApp conectado.');this.loadGroups(client,generation).catch(()=>{if(this.generation===generation&&this.status==='ready')this.store.event('groups_error','Não foi possível carregar a lista de grupos. Novas mensagens de grupos continuam somente para consulta.');});});
   client.on('auth_failure',()=>{if(this.generation===generation)this.update('error','A sessão expirou. Desconecte e leia um novo QR Code.');});
   client.on('disconnected',()=>{if(this.generation===generation){this.qr=null;this.number=null;this.update('disconnected','A conexão foi encerrada. Conecte novamente no painel.');}});
   client.on('message',message=>{
    if(this.generation!==generation||this.client!==client||this.status!=='ready'||readyAt===null)return;
-   if(message.fromMe||message.id?.fromMe||message.isStatus||!/^\d+@(c\.us|lid|s\.whatsapp\.net)$/.test(message.from))return;
+   const group=/^\d+(?:-\d+)?@g\.us$/.test(message.from);
+   if(message.fromMe||message.id?.fromMe||message.isStatus||!group&&!/^\d+@(c\.us|lid|s\.whatsapp\.net)$/.test(message.from))return;
    if(message.from===client.info?.wid?._serialized||message.from===client.info?.lid?._serialized)return;
    // Reconnection can replay history. Only accept new, identifiable customer messages.
    if(!message.id?._serialized||!Number.isFinite(message.timestamp)||message.timestamp<readyAt||message._data?.isNewMsg===false)return;
@@ -37,10 +38,16 @@ export class WhatsApp {
    if(!text&&!attachment)return;
    const body=attachment?'[Áudio ou anexo recebido — requer atendimento humano]':(message.selectedButtonId||message.selectedRowId||message.body);
    if(typeof body!=='string'||!body.trim())return;
+   if(group){this.store.addGroupMessage({id:message.from,providerId:message.id._serialized,author:message._data?.notifyName||message.author?.replace(/@.*$/,'')||'Participante',body:attachment?'[Áudio ou anexo recebido no grupo]':body,created:message.timestamp*1000});return;}
    this.receiver?.({phone:message.from,name:message._data?.notifyName||message.from.replace(/@.*$/,''),body,forceHuman:attachment,providerId:message.id._serialized,channel:'whatsapp',provider:'qr'}).catch(()=>this.store.event('error','Falha no processamento de uma mensagem recebida. Verifique a conversa.'));
   });
   client.initialize().catch(()=>{if(this.generation===generation)this.update('error','Não foi possível abrir o WhatsApp Web. Verifique a rede, a liberação de web.whatsapp.com e tente reconectar.');});
   return this.snapshot();
+ }
+ async loadGroups(client,generation){
+  if(typeof client.getChats!=='function')return;
+  const chats=await client.getChats();if(this.generation!==generation||this.client!==client||this.status!=='ready')return;
+  this.store.transaction(()=>{for(const chat of chats)if(chat.isGroup)this.store.upsertGroup(chat.id?._serialized,chat.name);});this.store.changed();
  }
  async send(chat,body,actions){
   if(this.status!=='ready'||!this.client)throw new Error('WhatsApp desconectado. Conecte no painel e reenvie a mensagem.');

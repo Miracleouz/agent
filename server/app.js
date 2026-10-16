@@ -24,7 +24,7 @@ export function createApp({store,whatsapp,production=false,appUrl=process.env.AP
  const cookie={httpOnly:true,sameSite:'strict',secure,path:'/',maxAge:7*86400000};
  const accounts=createAccounts(store,cookie),adminOnly=accounts.adminOnly;
  const typing=new Map();
- function clearPresence(userId){for(const [key,value] of typing)if(value.userId===userId)typing.delete(key);store.changed();}
+ function clearPresence(userId,chatId=null){for(const [key,value] of typing)if(value.userId===userId&&(!chatId||value.chatId===chatId))typing.delete(key);store.changed();}
  function presence(){const now=Date.now();for(const [key,value] of typing)if(value.expires<=now||!store.get('SELECT id FROM users WHERE id=? AND active=1',value.userId))typing.delete(key);return [...typing.values()].map(({expires,...value})=>value);}
  accounts.publicRoutes(app,authLimit);
  app.use('/api',accounts.middleware);
@@ -33,7 +33,7 @@ export function createApp({store,whatsapp,production=false,appUrl=process.env.AP
  app.get('/api/bootstrap',(req,res)=>{
   const settings=store.settings(),connection=whatsapp.snapshot(),admin=req.user.role==='admin';
   const chats=store.chats().filter(chat=>admin||!chat.assigned_user_id||chat.assigned_user_id===req.user.id),visibleIds=new Set(chats.map(chat=>chat.id));
-  res.json({currentUser:req.user,settings:admin?settings:{businessName:settings.businessName,agentEnabled:settings.agentEnabled,pauseMinutes:settings.pauseMinutes},stats:store.stats({userId:admin?null:req.user.id}),chats,typing:presence().filter(item=>visibleIds.has(item.chatId)),team:admin?store.all('SELECT id,name,role FROM users WHERE active=1 ORDER BY name'):[],connection:admin?connection:{status:connection.status,number:connection.number},imports:admin?store.all('SELECT * FROM imports ORDER BY created DESC LIMIT 8'):[],events:admin?store.all('SELECT * FROM events ORDER BY created DESC LIMIT 12'):[]});
+  res.json({currentUser:req.user,settings:admin?settings:{businessName:settings.businessName,agentEnabled:settings.agentEnabled,pauseMinutes:settings.pauseMinutes},stats:store.stats({userId:admin?null:req.user.id}),chats,groups:store.groupList(),typing:presence().filter(item=>visibleIds.has(item.chatId)),team:admin?store.all('SELECT id,name,role FROM users WHERE active=1 ORDER BY name'):[],connection:admin?connection:{status:connection.status,number:connection.number},imports:admin?store.all('SELECT * FROM imports ORDER BY created DESC LIMIT 8'):[],events:admin?store.all('SELECT * FROM events ORDER BY created DESC LIMIT 12'):[]});
  });
  app.get('/api/events',(req,res)=>{
   res.set({'Content-Type':'text/event-stream','Connection':'keep-alive','X-Accel-Buffering':'no'});res.flushHeaders();res.write('event: ready\ndata: {}\n\n');
@@ -48,19 +48,40 @@ export function createApp({store,whatsapp,production=false,appUrl=process.env.AP
  function getChat(id){const chat=store.chat(id);if(!chat)throw fail('Conversa não encontrada.',404);return chat;}
  function visibleChat(req){const chat=getChat(req.params.id);if(req.user.role!=='admin'&&chat.assigned_user_id&&chat.assigned_user_id!==req.user.id)throw fail('Esta conversa está com outro usuário.',403);return chat;}
  app.get('/api/chats/:id/messages',(req,res)=>{visibleChat(req);res.json(store.messages(req.params.id));});
- app.post('/api/chats/:id/read',(req,res)=>{visibleChat(req);store.run('UPDATE chats SET unread=0 WHERE id=?',req.params.id);res.json({ok:true});});
+ app.post('/api/chats/:id/read',(req,res)=>{const chat=visibleChat(req);if(chat.assigned_user_id===req.user.id){store.run('UPDATE chats SET unread=0 WHERE id=?',chat.id);store.changed();}res.json({ok:true});});
+ function getGroup(id){const group=store.get('SELECT id FROM whatsapp_groups WHERE id=?',id);if(!group)throw fail('Grupo não encontrado.',404);return group;}
+ app.get('/api/groups/:id/messages',(req,res)=>{getGroup(req.params.id);res.json(store.groupMessages(req.params.id));});
+ app.post('/api/groups/:id/read',(req,res)=>{getGroup(req.params.id);store.run('UPDATE whatsapp_groups SET unread=0 WHERE id=?',req.params.id);store.changed();res.json({ok:true});});
+ function queued(req,fn){const original=getChat(req.params.id);return agent.enqueue(`${original.provider}:${original.channel}:${original.phone}`,()=>{
+  const user=accounts.getUser(req);if(!user)throw fail('Entre novamente no painel.',401);req.user=user;return fn(getChat(original.id),user);
+ });}
+ app.post('/api/chats/:id/open',async(req,res)=>{
+  z.object({}).strict().parse(req.body||{});const result=await queued(req,(_chat,user)=>store.openChat(req.params.id,user));res.json(result);
+ });
+ app.post('/api/chats/:id/release',async(req,res)=>{
+  const {version}=z.object({version:z.number().int().min(0)}).strict().parse(req.body);
+  const result=await queued(req,(chat,user)=>{
+   if(chat.routing_version!==version)throw fail('O atendimento mudou. Atualize antes de liberar.',409);
+   if(!chat.assigned_user_id)throw fail('A conversa já está na fila.',409);
+   if(chat.assigned_user_id!==user.id&&user.role!=='admin')throw fail('Somente o responsável ou um Admin pode liberar esta conversa.',403);
+   clearPresence(chat.assigned_user_id,chat.id);const released=store.releaseChat(chat.id);store.event('release',`Conversa liberada por ${user.name}.`);return released;
+  });res.json(result);
+ });
  function canControl(req,chat,{takeover=false}={}){
   if(chat.assigned_user_id&&chat.assigned_user_id!==req.user.id&&!(takeover&&req.user.role==='admin'))throw fail('Esta conversa está com outro usuário. Peça a um Admin para transferir o atendimento.',409);
  }
- app.post('/api/chats/:id/pause',(req,res)=>{
-  const chat=getChat(req.params.id),input=z.object({minutes:z.number().int().min(1).max(1440).nullable(),takeover:z.boolean().optional()}).strict().parse(req.body);
-  canControl(req,chat,input);res.json(store.pause(chat.id,input.minutes,req.user.id));
+ app.post('/api/chats/:id/pause',async(req,res)=>{
+  const input=z.object({minutes:z.number().int().min(1).max(1440).nullable(),takeover:z.boolean().optional()}).strict().parse(req.body);
+  res.json(await queued(req,chat=>{canControl(req,chat,input);return store.pause(chat.id,input.minutes,req.user.id);}));
  });
- app.post('/api/chats/:id/resume',(req,res)=>{const chat=getChat(req.params.id);if(req.user.role!=='admin')canControl(req,chat);clearPresence(chat.assigned_user_id);res.json(store.resume(chat.id));});
- app.post('/api/chats/:id/assign',adminOnly,(req,res)=>{
-  const chat=getChat(req.params.id),{userId}=z.object({userId:z.string().min(1).max(100)}).strict().parse(req.body),user=store.get('SELECT id,name FROM users WHERE id=? AND active=1',userId);
-  if(!user)throw fail('Escolha um usuário ativo.',400);
-  clearPresence(chat.assigned_user_id);store.pause(chat.id,null,user.id);store.event('assignment',`Atendimento transferido para ${user.name} por ${req.user.name}.`);res.json(store.chat(chat.id));
+ app.post('/api/chats/:id/resume',async(req,res)=>{res.json(await queued(req,chat=>{if(req.user.role!=='admin')canControl(req,chat);clearPresence(chat.assigned_user_id,chat.id);return store.resume(chat.id);}));});
+ app.post('/api/chats/:id/assign',adminOnly,async(req,res)=>{
+  const {userId}=z.object({userId:z.string().min(1).max(100)}).strict().parse(req.body);
+  res.json(await queued(req,chat=>{
+   if(req.user.role!=='admin')throw fail('Somente um Admin pode transferir.',403);
+   const user=store.get('SELECT id,name FROM users WHERE id=? AND active=1',userId);if(!user)throw fail('Escolha um usuário ativo.',400);
+   clearPresence(chat.assigned_user_id,chat.id);store.pause(chat.id,null,user.id);store.event('assignment',`Atendimento transferido para ${user.name} por ${req.user.name}.`);return store.chat(chat.id);
+  }));
  });
  app.post('/api/chats/:id/typing',(req,res)=>{
   const chat=getChat(req.params.id),input=z.object({typing:z.boolean()}).strict().parse(req.body);canControl(req,chat);
@@ -77,11 +98,12 @@ export function createApp({store,whatsapp,production=false,appUrl=process.env.AP
  });
  const agent=new Agent(store,(chat,body,actions)=>whatsapp.send(chat,body,actions),{canSend:chat=>chat.channel==='simulator'||whatsapp.snapshot().status==='ready'});whatsapp.receiver=input=>agent.receive(input);
  app.post('/api/chats/:id/send',async(req,res)=>{
-  const original=getChat(req.params.id),{body}=z.object({body:z.string().trim().min(1).max(4000)}).strict().parse(req.body);
+  const original=getChat(req.params.id),{body,version}=z.object({body:z.string().trim().min(1).max(4000),version:z.number().int().min(0).optional()}).strict().parse(req.body);
   const result=await agent.enqueue(`${original.provider}:${original.channel}:${original.phone}`,async()=>{
    const user=accounts.getUser(req);if(!user)throw fail('Entre novamente no painel.',401);
    const chat=getChat(original.id);if(chat.mode!=='manual')throw fail('Ative "Responder manual" antes de enviar.',409);canControl(req,chat);
-   if(!chat.assigned_user_id)store.run('UPDATE chats SET assigned_user_id=? WHERE id=?',user.id,chat.id);
+   if(chat.routing_version!==original.routing_version||version!==undefined&&version!==chat.routing_version)throw fail('O atendimento mudou. Confira a conversa antes de enviar.',409);
+   if(!chat.assigned_user_id)store.openChat(chat.id,user);
    typing.delete(chat.id+':'+user.id);const transportBody=store.settings().signHumanMessages?`*${user.name}*: ${body}`:body;
    return agent.reply(chat,body,[],'owner',{author:user,transportBody});
   });

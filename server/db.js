@@ -20,6 +20,9 @@ export class Store extends EventEmitter {
    CREATE INDEX IF NOT EXISTS messages_chat ON messages(chat_id,created);
    CREATE INDEX IF NOT EXISTS chats_updated ON chats(updated);
    CREATE TABLE IF NOT EXISTS events(id TEXT PRIMARY KEY, kind TEXT NOT NULL, detail TEXT NOT NULL, created INTEGER NOT NULL);
+   CREATE TABLE IF NOT EXISTS whatsapp_groups(id TEXT PRIMARY KEY,name TEXT NOT NULL,unread INTEGER NOT NULL DEFAULT 0,updated INTEGER NOT NULL);
+   CREATE TABLE IF NOT EXISTS whatsapp_group_messages(id TEXT PRIMARY KEY,group_id TEXT NOT NULL REFERENCES whatsapp_groups(id),provider_id TEXT NOT NULL UNIQUE,author_name TEXT NOT NULL,body TEXT NOT NULL,created INTEGER NOT NULL);
+   CREATE INDEX IF NOT EXISTS group_messages_created ON whatsapp_group_messages(group_id,created);
   `);
   // Rebuild the old CHECK constraint without changing user IDs or session references.
   if(!this.get("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").sql.includes("'comercial'")){
@@ -40,6 +43,7 @@ export class Store extends EventEmitter {
    if(!this.all('PRAGMA table_info(chats)').some(column=>column.name===name))this.db.exec(`ALTER TABLE chats ADD COLUMN ${name} ${type}`);
   }
   if(migrateAlerts)this.db.exec("UPDATE chats SET purchase_requested=1,order_state='interest' WHERE needs_human=1 AND handoff_reason='purchase';UPDATE chats SET human_requested=1 WHERE needs_human=1 AND handoff_reason='human';");
+  if(!this.all('PRAGMA table_info(chats)').some(column=>column.name==='routing_version'))this.db.exec('ALTER TABLE chats ADD COLUMN routing_version INTEGER NOT NULL DEFAULT 0');
   this.db.prepare('INSERT OR IGNORE INTO settings VALUES(1,?)').run(JSON.stringify({priceMode:'sale',markupPercent:0,mmDimension:'width',openBeltPriceBasis:'per_meter_full_width',businessName:'Minha loja',pauseMinutes:30,sheetUrl:DEFAULT_SHEET,syncMinutes:0,agentEnabled:true,lastSync:null}));
   this.db.prepare("UPDATE messages SET status='failed',error='Envio interrompido pelo reinício. Confira no WhatsApp antes de reenviar.' WHERE status='pending'").run();
   // Never deliver old reminders when a process is restarted or a database is reopened.
@@ -56,16 +60,36 @@ export class Store extends EventEmitter {
   this.run(`UPDATE chats SET followup_due_at=NULL,followup_state=CASE WHEN followup_state IN ('scheduled','sending') THEN 'cancelled' ELSE followup_state END${keepMenu?'':',followup_menu=0'} WHERE ${id?'id=?':whatsappOnly?"channel='whatsapp'":'1=1'}`, ...(id?[id]:[]));
  }
  event(kind,detail){this.run('INSERT INTO events VALUES(?,?,?,?)',randomUUID(),kind,detail,Date.now());this.changed();}
- chat(id){const c=this.get('SELECT * FROM chats WHERE id=?',id);return c?{...c,shown:JSON.parse(c.shown)}:null;}
- resumeExpired(){const r=this.run("UPDATE chats SET mode='auto',pause_until=NULL,needs_human=0,handoff_reason=NULL,purchase_summary=NULL,assigned_user_id=NULL,human_requested=0,purchase_requested=0 WHERE mode='manual' AND pause_until IS NOT NULL AND pause_until<=?",Date.now());if(r.changes)this.changed();}
+ chat(id){const c=this.get('SELECT c.*,(SELECT name FROM users WHERE id=c.assigned_user_id) assigned_name FROM chats c WHERE id=?',id);return c?{...c,shown:JSON.parse(c.shown)}:null;}
+ resumeExpired(){const r=this.run("UPDATE chats SET mode='auto',pause_until=NULL,needs_human=0,handoff_reason=NULL,purchase_summary=NULL,human_requested=0,purchase_requested=0,routing_version=routing_version+1 WHERE mode='manual' AND pause_until IS NOT NULL AND pause_until<=?",Date.now());if(r.changes)this.changed();}
  chats(){this.resumeExpired();return this.all(`SELECT c.*, (SELECT name FROM users WHERE id=c.assigned_user_id) AS assigned_name, (SELECT body FROM messages WHERE chat_id=c.id ORDER BY created DESC,rowid DESC LIMIT 1) AS preview FROM chats c ORDER BY updated DESC`).map(c=>({...c,shown:JSON.parse(c.shown)}));}
  messages(id){return this.all('SELECT * FROM messages WHERE chat_id=? ORDER BY created,rowid',id).map(m=>({...m,actions:JSON.parse(m.actions)}));}
  addMessage({chatId,providerId=null,direction,body,actions=[],status='received',author=null,deliveryBody=null}){
   const id=randomUUID(),now=Date.now();this.run('INSERT INTO messages(id,chat_id,provider_id,direction,body,actions,status,created,author_id,author_name,author_role,delivery_body) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',id,chatId,providerId,direction,body,JSON.stringify(actions),status,now,author?.id||null,author?.name||null,author?.role||null,deliveryBody);
   this.run('UPDATE chats SET updated=? WHERE id=?',now,chatId);this.changed();return this.get('SELECT * FROM messages WHERE id=?',id);
  }
- pause(id,minutes,userId=null){this.cancelFollowups(id);this.run("UPDATE chats SET mode='manual',pause_until=?,assigned_user_id=? WHERE id=?",minutes?Date.now()+minutes*60000:null,userId,id);this.changed();return this.chat(id);}
- resume(id){this.cancelFollowups(id);this.run("UPDATE chats SET mode='auto',pause_until=NULL,needs_human=0,handoff_reason=NULL,purchase_summary=NULL,pending_selection=NULL,assigned_user_id=NULL,human_requested=0,purchase_requested=0 WHERE id=?",id);this.changed();return this.chat(id);}
+ pause(id,minutes,userId=null){this.cancelFollowups(id);this.run("UPDATE chats SET mode='manual',pause_until=?,assigned_user_id=COALESCE(?,assigned_user_id),routing_version=routing_version+1 WHERE id=?",minutes?Date.now()+minutes*60000:null,userId,id);this.changed();return this.chat(id);}
+ resume(id){this.cancelFollowups(id);this.run("UPDATE chats SET mode='auto',pause_until=NULL,needs_human=0,handoff_reason=NULL,purchase_summary=NULL,pending_selection=NULL,human_requested=0,purchase_requested=0,routing_version=routing_version+1 WHERE id=?",id);this.changed();return this.chat(id);}
+ openChat(id,user){
+  const result=this.transaction(()=>{
+   const chat=this.chat(id);if(!chat)throw Object.assign(new Error('Conversa não encontrada.'),{status:404});
+   if(chat.assigned_user_id&&chat.assigned_user_id!==user.id){
+    if(user.role==='admin')return{chat,observing:true};
+    throw Object.assign(new Error('Outro usuário assumiu esta conversa. Atualize a fila.'),{status:409});
+   }
+   if(!chat.assigned_user_id){this.cancelFollowups(id);this.run("UPDATE chats SET assigned_user_id=?,mode='manual',pause_until=NULL,unread=0,routing_version=routing_version+1 WHERE id=? AND assigned_user_id IS NULL",user.id,id);}
+   else this.run('UPDATE chats SET unread=0 WHERE id=?',id);
+   return{chat:this.chat(id),observing:false};
+  });this.changed();return result;
+ }
+ releaseChat(id){this.cancelFollowups(id);this.run("UPDATE chats SET assigned_user_id=NULL,mode='manual',pause_until=NULL,unread=MAX(unread,1),routing_version=routing_version+1 WHERE id=?",id);this.changed();return this.chat(id);}
+ groupList(){return this.all("SELECT g.*,g.id phone,'group' channel,'readonly' mode,(SELECT body FROM whatsapp_group_messages WHERE group_id=g.id ORDER BY created DESC,rowid DESC LIMIT 1) preview FROM whatsapp_groups g ORDER BY updated DESC");}
+ upsertGroup(id,name){if(!/^\d+(?:-\d+)?@g\.us$/.test(id))return;this.run('INSERT INTO whatsapp_groups(id,name,updated) VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name',id,String(name||id).slice(0,150),Date.now());}
+ addGroupMessage({id,name,providerId,author,body,created}){
+  if(!/^\d+(?:-\d+)?@g\.us$/.test(id)||!providerId||!body?.trim())return;
+  this.transaction(()=>{this.upsertGroup(id,name||this.get('SELECT name FROM whatsapp_groups WHERE id=?',id)?.name||id);const result=this.run('INSERT OR IGNORE INTO whatsapp_group_messages VALUES(?,?,?,?,?,?)',randomUUID(),id,providerId,String(author||'Participante').slice(0,100),body.trim().slice(0,10000),created);if(result.changes)this.run('UPDATE whatsapp_groups SET unread=unread+1,updated=MAX(updated,?) WHERE id=?',created,id);});this.changed();
+ }
+ groupMessages(id){return this.all("SELECT *,'in' direction,'received' status FROM (SELECT *,rowid sequence FROM whatsapp_group_messages WHERE group_id=? ORDER BY created DESC,rowid DESC LIMIT 500) ORDER BY created,sequence",id).map(message=>({...message,actions:[]}));}
  stats({userId=null}={}){
   const scope=userId?' AND (c.assigned_user_id IS NULL OR c.assigned_user_id=?)':'',args=userId?[userId]:[];
   return {products:this.get('SELECT count(*) n FROM products WHERE quantity>0 AND price>0').n,conversations:this.get("SELECT count(*) n FROM chats c WHERE c.channel='whatsapp'"+scope,...args).n,replies:this.get("SELECT count(*) n FROM messages m JOIN chats c ON c.id=m.chat_id WHERE m.direction='bot' AND m.status='sent' AND c.channel='whatsapp'"+scope,...args).n,waiting:this.get('SELECT count(*) n FROM chats c WHERE c.needs_human=1'+scope,...args).n};
