@@ -7,24 +7,26 @@ O bloco para o Cota, confere se algum outro contêiner deste Docker ainda usa o 
 Cole o bloco inteiro no PowerShell, na pasta da instalação atual:
 
 ```powershell
-$ErrorActionPreference = 'Stop'
-$cotaIds = @(docker compose ps --all --quiet cota)
-if ($LASTEXITCODE -ne 0 -or $cotaIds.Count -ne 1) { throw 'Não foi possível identificar um único contêiner do Cota nesta pasta.' }
-$cotaId = $cotaIds[0]
-$cotaVolume = docker inspect --format '{{range .Mounts}}{{if and (eq .Destination "/app/data") (eq .Type "volume")}}{{.Name}}{{end}}{{end}}' $cotaId
-$cotaImage = docker inspect --format '{{.Image}}' $cotaId
-if (-not $cotaVolume -or $cotaImage -notmatch '^sha256:[a-f0-9]{64}$') { throw 'Não foi possível confirmar o volume e a imagem existentes. Nenhum arquivo foi alterado.' }
-$cotaDriver = docker volume inspect --format '{{.Driver}}' $cotaVolume
-$cotaOptions = docker volume inspect --format '{{json .Options}}' $cotaVolume
-if ($LASTEXITCODE -ne 0 -or $cotaDriver -ne 'local' -or $cotaOptions -notin @('null','{}')) { throw 'O volume não é local padrão. A recuperação automática foi interrompida.' }
-docker stop --time 30 $cotaId
-if ($LASTEXITCODE -ne 0) { throw 'Não foi possível parar o Cota.' }
-$cotaAtivos = @(docker ps --filter "volume=$cotaVolume" --quiet)
-if ($LASTEXITCODE -ne 0 -or $cotaAtivos.Count -gt 0) { throw 'Outro contêiner ainda usa o volume, ou a verificação falhou. Nenhum bloqueio foi removido.' }
-docker run --rm --init --network none --mount "type=volume,source=$cotaVolume,target=/app/data" -e DATA_DIR=/app/data --entrypoint node $cotaImage server/recover-whatsapp-profile.js --clear-stale-locks --confirm-all-instances-stopped
-if ($LASTEXITCODE -ne 0) { throw 'A manutenção foi recusada. Envie o erro acima; o Cota permanece parado.' }
-docker start $cotaId
-if ($LASTEXITCODE -ne 0) { throw 'A manutenção terminou, mas o contêiner não iniciou. Envie o erro acima.' }
+& {
+    $ErrorActionPreference = 'Stop'
+    $cotaIds = @(docker compose ps --all --quiet cota)
+    if ($LASTEXITCODE -ne 0 -or $cotaIds.Count -ne 1) { throw 'Não foi possível identificar um único contêiner do Cota nesta pasta.' }
+    $cotaId = $cotaIds[0]
+    $cotaVolume = docker inspect --format '{{range .Mounts}}{{if and (eq .Destination "/app/data") (eq .Type "volume")}}{{.Name}}{{end}}{{end}}' $cotaId
+    $cotaImage = docker inspect --format '{{.Image}}' $cotaId
+    if (-not $cotaVolume -or $cotaImage -notmatch '^sha256:[a-f0-9]{64}$') { throw 'Não foi possível confirmar o volume e a imagem existentes. Nenhum arquivo foi alterado.' }
+    $cotaDriver = docker volume inspect --format '{{.Driver}}' $cotaVolume
+    $cotaOptions = docker volume inspect --format '{{json .Options}}' $cotaVolume
+    if ($LASTEXITCODE -ne 0 -or $cotaDriver -ne 'local' -or $cotaOptions -notin @('null','{}')) { throw 'O volume não é local padrão. A recuperação automática foi interrompida.' }
+    docker stop --time 30 $cotaId
+    if ($LASTEXITCODE -ne 0) { throw 'Não foi possível parar o Cota.' }
+    $cotaAtivos = @(docker ps --filter "volume=$cotaVolume" --quiet)
+    if ($LASTEXITCODE -ne 0 -or $cotaAtivos.Count -gt 0) { throw 'Outro contêiner ainda usa o volume, ou a verificação falhou. Nenhum bloqueio foi removido.' }
+    docker run --rm --init --network none --mount "type=volume,source=$cotaVolume,target=/app/data" -e DATA_DIR=/app/data --entrypoint node $cotaImage server/recover-whatsapp-profile.js --clear-stale-locks --confirm-all-instances-stopped
+    if ($LASTEXITCODE -ne 0) { throw 'A manutenção foi recusada. Envie o erro acima; o Cota permanece parado.' }
+    docker start $cotaId
+    if ($LASTEXITCODE -ne 0) { throw 'A manutenção terminou, mas o contêiner não iniciou. Envie o erro acima.' }
+}
 ```
 
 A manutenção informa quantos links foram removidos, ou que não havia links a remover. Após iniciar, abra o painel, pressione Ctrl+F5 e aguarde a restauração/QR. Se necessário, clique em Gerar QR Code. Se a manutenção recusar, envie seu texto exato: ele distingue outro processo, permissões, diretório ou formato inesperado. O bloco não tenta contornar uma recusa nem reinicia automaticamente o serviço após erro na manutenção.
