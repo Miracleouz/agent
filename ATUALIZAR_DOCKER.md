@@ -1,6 +1,6 @@
-# Atualizar para a versão 1.15.3 no Docker
+# Atualizar para a versão 1.15.4 no Docker
 
-A versão 1.15.3 corrige a espera pelos componentes de autenticação e o tratamento de navegações do WhatsApp. Trata os erros `Socket` nulo e `detached Frame`, preserva a sessão e permite nova tentativa de QR sem derrubar o Cota. Veja [AUTENTICACAO_E_NAVEGACAO.md](docs/AUTENTICACAO_E_NAVEGACAO.md). Se o erro for especificamente `profile_busy`, o procedimento com serviço parado continua em [PERFIL_OCUPADO_E_CONEXAO.md](docs/PERFIL_OCUPADO_E_CONEXAO.md).
+A versão 1.15.4 corrige uma espera sem limite no carregamento da página antes da autenticação. O painel mostra o progresso, a inicialização tem prazo e uma falha permite nova tentativa, preservando a sessão e o histórico. Veja [CARREGAMENTO_QR.md](docs/CARREGAMENTO_QR.md). Se o erro atual for `profile_busy`, use o procedimento específico em [PERFIL_OCUPADO_E_CONEXAO.md](docs/PERFIL_OCUPADO_E_CONEXAO.md), com as instâncias que compartilham a sessão paradas.
 
 Use a instalação que já está funcionando. O ZIP contém o código; estoque, usuários, conversas e sessão do WhatsApp permanecem no volume existente.
 
@@ -12,7 +12,7 @@ Use a instalação que já está funcionando. O ZIP contém o código; estoque, 
 docker compose stop -t 30 cota
 ```
 
-4. Copie o conteúdo da pasta extraída (`agent-<código>` no download do GitHub ou `cota-whatsapp-1.15.3` no pacote local) para a pasta da instalação atual, substituindo os arquivos do código. O `compose.yaml`, o `Dockerfile`, `server` e `src` devem ficar diretamente na pasta atual, sem criar outra pasta dentro dela. Preserve seu `.env`, dados locais e eventuais ajustes próprios de porta, domínio ou volumes no `compose.yaml`.
+4. Copie o conteúdo da pasta extraída (`agent-<código>` no download do GitHub ou `cota-whatsapp-1.15.4` no pacote local) para a pasta da instalação atual, substituindo os arquivos do código. O `compose.yaml`, o `Dockerfile`, `server` e `src` devem ficar diretamente na pasta atual, sem criar outra pasta dentro dela. Preserve seu `.env`, dados locais e eventuais ajustes próprios de porta, domínio ou volumes no `compose.yaml`.
 5. Na mesma pasta e usando o mesmo projeto Compose da instalação anterior, execute:
 
 ```powershell
@@ -34,7 +34,7 @@ docker compose logs --tail=100 cota
 docker compose exec cota node -p "require('./package.json').version"
 ```
 
-Deve mostrar `1.15.3`.
+Deve mostrar `1.15.4`.
 
 8. Abra o endereço que você já usa para acessar o painel e pressione **Ctrl+F5**. Na instalação local padrão, o endereço digitado no navegador é `localhost:3000`. Assuma um chat de teste com outro número e envie uma mensagem manual. Confira a mensagem no WhatsApp e o check no Cota. Se houver perda de confirmação sem prova suficiente, o painel mostrará **Envio não confirmado**, com orientação para conferir no WhatsApp antes de reenviar. Não há reenvio automático. As marcações antigas já gravadas não são alteradas sem confirmação.
 
@@ -54,4 +54,4 @@ Nesta versão, o atendimento automático envia um único aviso e encerra após c
 
 Não execute `docker compose down -v` nem exclua o volume `cota-data`. O nome real do volume costuma incluir o nome do projeto Compose. Mantenha a mesma instalação/projeto para preservar estoque, acessos, histórico e sessão. Caso a sessão de WhatsApp tenha expirado, gere um novo QR no painel.
 
-O pacote foi verificado com 3.292 testes automatizados, 40 testes de navegador e build de produção. A imagem Docker precisa ser construída no seu host pelo comando acima; não foi executado um build Docker neste ambiente.
+O pacote foi verificado com 3.309 testes automatizados, 42 testes de navegador e build de produção. A imagem Docker precisa ser construída no seu host pelo comando acima; não foi executado um build Docker neste ambiente.

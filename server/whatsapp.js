@@ -9,11 +9,16 @@ import {WhatsAppReadSync} from './whatsapp-read.js';
 import {WhatsAppAvatars} from './whatsapp-avatars.js';
 import {sendConfirmed} from './whatsapp-send.js';
 import {WhatsAppClient} from './whatsapp-client.js';
+import {connectionStageLabel} from './connection-progress.js';
 const {LocalAuth,MessageMedia}=wa;
+function closeClient(client,timeout){return new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error('COTA_BROWSER_CLOSE_TIMEOUT')),timeout);Promise.resolve().then(()=>client.destroy()).then(value=>{clearTimeout(timer);resolve(value);},()=>{clearTimeout(timer);reject(new Error('COTA_BROWSER_CLOSE_TIMEOUT'));});});}
 export class WhatsApp {
- constructor(store,dataDir,{clientFactory=options=>new WhatsAppClient(options),logger=console}={}){this.store=store;this.dataDir=dataDir;this.clientFactory=clientFactory;this.logger=logger;this.client=null;this.status='disconnected';this.qr=null;this.error=null;this.number=null;this.receiver=null;this.generation=0;this.mediaTasks=new Set();this.syncer=new WhatsAppSync(this);this.readSync=new WhatsAppReadSync(this);this.avatars=new WhatsAppAvatars(this);}
- snapshot(){return {status:this.status,qr:this.qr,error:this.error,number:this.number,transport:'qr',nativeButtons:false,sync:this.syncer.snapshot()};}
- update(status,error=null){if(status!=='ready'&&this.readSync?.pending.size)this.readSync.reset();this.status=status;this.error=error;if(status!=='ready')this.store.cancelFollowups(null,{whatsappOnly:true});this.store.changed();}
+ constructor(store,dataDir,{clientFactory=options=>new WhatsAppClient(options),logger=console,startupTimeout=null,cleanupTimeout=6000}={}){this.store=store;this.dataDir=dataDir;this.clientFactory=clientFactory;this.logger=logger;this.startupTimeout=startupTimeout;this.cleanupTimeout=cleanupTimeout;this.client=null;this.status='disconnected';this.qr=null;this.error=null;this.number=null;this.receiver=null;this.generation=0;this.mediaTasks=new Set();this.syncer=new WhatsAppSync(this);this.readSync=new WhatsAppReadSync(this);this.avatars=new WhatsAppAvatars(this);}
+ snapshot(){return {status:this.status,qr:this.qr,error:this.error,number:this.number,transport:'qr',nativeButtons:false,progress:{stage:this.stage||null,message:connectionStageLabel(this.stage),deadlineAt:this.deadlineAt||null},sync:this.syncer.snapshot()};}
+ clearStartup(){clearTimeout(this.startupTimer);this.startupTimer=null;this.deadlineAt=null;}
+ progress(stage){if(!connectionStageLabel(stage)||stage===this.stage)return;this.stage=stage;this.logger.info?.(`[WhatsApp connect] stage=${stage}`);this.store.changed();}
+ armStartup(client,generation){this.clearStartup();const timeout=this.startupTimeout??authenticationTimeout(process.env.WHATSAPP_AUTH_TIMEOUT_MS);this.deadlineAt=Date.now()+timeout;this.startupTimer=setTimeout(()=>{if(this.client!==client||this.generation!==generation||!['starting','authenticated'].includes(this.status))return;this.connectionFailed(new Error('COTA_CONNECTION_TIMEOUT'));closeClient(client,this.cleanupTimeout).catch(()=>{});},timeout);this.startupTimer.unref?.();}
+ update(status,error=null){if(!['starting','authenticated'].includes(status))this.clearStartup();if(status!=='ready'&&this.readSync?.pending.size)this.readSync.reset();this.status=status;this.error=error;if(status!=='ready')this.store.cancelFollowups(null,{whatsappOnly:true});this.store.changed();}
  connectionFailed(error){const diagnosis=connectionError(error);this.qr=null;this.number=null;this.update('error',`${diagnosis.message} Código: ${diagnosis.code}.`);this.store.event('whatsapp_error',this.error);this.logger.error(`[WhatsApp] ${diagnosis.code}: ${safeConnectionDetail(error)}`);}
  connect(){
   if(this.connecting)return this.connecting;
@@ -22,8 +27,10 @@ export class WhatsApp {
  async startConnection(){
   if(this.client&&['starting','qr','authenticated','ready'].includes(this.status))return this.snapshot();
   const generation=++this.generation;
+  this.clearStartup();
   this.syncer.reset();this.readSync.reset();this.avatars.reset();this.readyAt=null;
-  const previous=this.client;this.client=null;if(previous)await previous.destroy().catch(()=>{});
+  const previous=this.client;this.client=null;this.qr=null;this.number=null;this.update('starting');
+  if(previous){this.progress('closing_previous');try{await closeClient(previous,this.cleanupTimeout);}catch(error){if(this.generation===generation){this.client=previous;this.connectionFailed(error);}return this.snapshot();}}
   if(this.generation!==generation)return this.snapshot();
   const executablePath=process.env.CHROME_PATH||['/usr/bin/chromium','/usr/bin/chromium-browser','/usr/bin/google-chrome'].find(existsSync);
   if(!executablePath||!existsSync(executablePath)){this.connectionFailed(new Error('Chromium não encontrado. Confira CHROME_PATH.'));return this.snapshot();}
@@ -35,12 +42,14 @@ export class WhatsApp {
   let client;try{client=this.clientFactory({authStrategy:new LocalAuth({dataPath:join(this.dataDir,'whatsapp')}),authTimeoutMs:authenticationTimeout(process.env.WHATSAPP_AUTH_TIMEOUT_MS),puppeteer:{headless:true,executablePath,args},...(proxyAuthentication?{proxyAuthentication}:{}),webVersionCache:{type:'none'}});}catch(error){this.connectionFailed(error);return this.snapshot();}
   let readyAt=null;
   this.client=client;
+  this.progress('browser_start');this.armStartup(client,generation);
   this.readSync.register(client,generation);
-  client.on('cota_reloading',()=>{if(this.generation!==generation||this.client!==client||this.status==='error')return;readyAt=null;this.readyAt=null;this.syncer.reset();this.readSync.reset();this.avatars.reset();this.qr=null;this.number=null;this.update('starting');});
+  client.on('cota_stage',stage=>{if(this.generation===generation&&this.client===client&&this.status!=='error')this.progress(stage);});
+  client.on('cota_reloading',()=>{if(this.generation!==generation||this.client!==client||this.status==='error')return;readyAt=null;this.readyAt=null;this.syncer.reset();this.readSync.reset();this.avatars.reset();this.qr=null;this.number=null;this.update('starting');if(!this.startupTimer)this.armStartup(client,generation);});
   client.on('cota_connection_error',error=>{if(this.generation!==generation||this.client!==client||this.status==='error')return;this.syncer.reset();this.readSync.reset();this.avatars.reset();this.connectionFailed(error);Promise.resolve().then(()=>client.destroy()).catch(()=>{});});
-  client.on('qr',async code=>{try{const qr=await QRCode.toDataURL(code,{width:300,margin:2});if(this.generation!==generation||this.status==='error')return;this.qr=qr;this.update('qr');}catch(error){if(this.generation===generation&&this.status!=='error')this.connectionFailed(error);}});
-  client.on('authenticated',()=>{if(this.generation!==generation||this.status==='error')return;this.qr=null;this.update('authenticated');});
-  client.on('ready',()=>{if(this.generation!==generation||this.status==='error')return;readyAt=Math.floor(Date.now()/1000);this.readyAt=readyAt;this.qr=null;this.number=client.info?.wid?.user||null;this.update('ready');this.store.event('whatsapp','WhatsApp conectado.');this.syncer.run().catch(error=>{if(this.generation===generation)this.syncer.report(error);});});
+  client.on('qr',async code=>{try{const qr=await QRCode.toDataURL(code,{width:300,margin:2});if(this.generation!==generation||this.status==='error')return;this.qr=qr;this.update('qr');this.progress('qr_wait');}catch(error){if(this.generation===generation&&this.status!=='error')this.connectionFailed(error);}});
+  client.on('authenticated',()=>{if(this.generation!==generation||this.status==='error')return;const initial=this.status!=='authenticated';this.qr=null;this.update('authenticated');this.progress('session_sync');if(initial)this.armStartup(client,generation);});
+  client.on('ready',()=>{if(this.generation!==generation||this.status==='error')return;readyAt=Math.floor(Date.now()/1000);this.readyAt=readyAt;this.qr=null;this.number=client.info?.wid?.user||null;this.update('ready');this.progress('ready');this.store.event('whatsapp','WhatsApp conectado.');this.syncer.run().catch(error=>{if(this.generation===generation)this.syncer.report(error);});});
   client.on('auth_failure',()=>{if(this.generation===generation)this.update('error','A sessão expirou. Desconecte e leia um novo QR Code.');});
   client.on('disconnected',()=>{if(this.generation===generation&&this.status!=='error'){this.syncer.reset();this.readSync.reset();this.avatars.reset();this.qr=null;this.number=null;this.update('disconnected','A conexão foi encerrada. Conecte novamente no painel.');}});
   client.on('message',message=>{
@@ -69,7 +78,7 @@ export class WhatsApp {
     }).catch(()=>{});this.mediaTasks.add(task);task.finally(()=>this.mediaTasks.delete(task));
    }
   });
-  Promise.resolve().then(()=>client.initialize()).catch(error=>{if(this.generation===generation)this.connectionFailed(error);});
+  Promise.resolve().then(()=>client.initialize()).catch(error=>{if(this.generation===generation&&this.client===client&&this.status!=='error')this.connectionFailed(error);});
   return this.snapshot();
  }
  sync(){return this.syncer.run();}
@@ -115,6 +124,6 @@ export class WhatsApp {
   if(edited.id?._serialized!==providerId)throw new Error('Não foi possível confirmar a edição.');return providerId;
  }
  async drainMedia(){await Promise.allSettled([...this.mediaTasks]);}
- async disconnect(){++this.generation;this.syncer.reset();this.readSync.reset();this.avatars.reset();const client=this.client;this.client=null;if(client){try{if(this.status==='ready')await client.logout();}catch{}await client.destroy().catch(()=>{});}this.qr=null;this.number=null;this.update('disconnected');}
- async close(){++this.generation;this.syncer.reset();this.readSync.reset();this.avatars.reset();if(this.client)await this.client.destroy().catch(()=>{});}
+ async disconnect(){++this.generation;this.clearStartup();this.syncer.reset();this.readSync.reset();this.avatars.reset();const client=this.client;this.client=null;if(client){try{if(this.status==='ready')await client.logout();}catch{}await closeClient(client,this.cleanupTimeout).catch(()=>{});}this.qr=null;this.number=null;this.update('disconnected');}
+ async close(){++this.generation;this.clearStartup();this.syncer.reset();this.readSync.reset();this.avatars.reset();if(this.client)await closeClient(this.client,this.cleanupTimeout).catch(()=>{});}
 }

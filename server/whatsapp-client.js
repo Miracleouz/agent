@@ -27,10 +27,34 @@ export class WhatsAppClient extends wa.Client{
   super(options);this.stopping=false;this.controller=new AbortController();this.navigationTasks=new Set();this.guardedPages=new WeakSet();
   let page=this.pupPage;
   Object.defineProperty(this,'pupPage',{configurable:true,get:()=>page,set:value=>{page=value;if(value)this.guardNavigation(value);}});
+  let browser=this.pupBrowser;
+  Object.defineProperty(this,'pupBrowser',{configurable:true,get:()=>browser,set:value=>{browser=value;if(value&&this.stopping)this.closeLateBrowser(value);}});
+ }
+ stage(value){this.connectionStage=value;this.emit('cota_stage',value);}
+ initialize(){
+  if(this.initializing)return this.initializing;
+  if(this.stopping)return Promise.reject(new Error('COTA_AUTH_CANCELLED'));
+  this.stage('browser_start');
+  const task=within(()=>super.initialize(),this.controller.signal,this.options.authTimeoutMs||90000).catch(async error=>{if(!this.stopping)await this.destroy().catch(()=>{});if(error?.name==='TimeoutError')throw new Error('COTA_CONNECTION_TIMEOUT');throw error;});
+  this.initializing=task;return task;
+ }
+ closeLateBrowser(browser){
+  const task=within(()=>browser.close(),new AbortController().signal,5000).catch(()=>{const process=browser.process?.();if(process&&!process.killed)process.kill('SIGKILL');});
+  this.lateBrowserClose=task;return task;
  }
  guardNavigation(page){
   if(this.guardedPages.has(page))return;this.guardedPages.add(page);
   const on=page.on.bind(page);
+  if(typeof page.goto==='function'){
+   const goto=page.goto.bind(page);
+   page.goto=(url,options={})=>{
+    if(url!=='https://web.whatsapp.com/')return goto(url,options);
+    this.stage('page_load');
+    // Optional resources can keep the load event pending forever. The auth
+    // readiness checks independently wait for the required WhatsApp modules.
+    return goto(url,{...options,waitUntil:'domcontentloaded',timeout:this.options.authTimeoutMs||90000});
+   };
+  }
   page.on=(event,listener)=>{
    if(event!=='framenavigated')return on(event,listener);
    return on(event,frame=>{
@@ -56,7 +80,7 @@ export class WhatsAppClient extends wa.Client{
   const page=this.pupPage,signal=this.controller.signal,active=()=>!signal.aborted&&!this.stopping&&this.pupPage===page;
   if(!page||!active())return;
   if(await page.evaluate(injected).catch(()=>false))return;
-  if(!active())return;this.emit('cota_reloading');
+  if(!active())return;this.stage('auth_modules');this.emit('cota_reloading');
   const deadline=Date.now()+(this.options.authTimeoutMs||90000);let attempts=0;
   while(active()){
    try{
@@ -76,6 +100,7 @@ export class WhatsAppClient extends wa.Client{
  destroy(){
   if(this.destroying)return this.destroying;
   this.stopping=true;this.controller.abort();
-  this.destroying=super.destroy();return this.destroying;
+  const browser=this.pupBrowser;
+  this.destroying=within(()=>super.destroy(),new AbortController().signal,5000).catch(error=>{const process=browser?.process?.();if(process&&!process.killed)process.kill('SIGKILL');throw error;});return this.destroying;
  }
 }

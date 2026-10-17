@@ -9,6 +9,8 @@ import {Store} from '../server/db.js';
 import {WhatsApp} from '../server/whatsapp.js';
 import {connectionError,safeConnectionDetail,authenticationTimeout} from '../server/connection-errors.js';
 const cases=[
+ ['COTA_CONNECTION_TIMEOUT','connection_timeout'],
+ ['COTA_BROWSER_CLOSE_TIMEOUT','browser_close_timeout'],
  ['Cannot read properties of null (reading \'Socket\')','auth_modules'],
  ['COTA_AUTH_MODULES_UNAVAILABLE','auth_modules'],
  ['Attempted to use detached Frame \'test-frame\'','page_reloaded'],

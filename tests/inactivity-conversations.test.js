@@ -21,6 +21,8 @@ async function fixture(t){
  const store=new Store(':memory:');replaceCatalog(store,industrialStock,'test');const client=new Client(),pending=[];let clock=Date.now();
  const wa=new WhatsApp(store,'/tmp/cota-idle-fake',{clientFactory:()=>client}),agent=new Agent(store,(...args)=>wa.send(...args),{now:()=>clock,canSend:()=>wa.status==='ready'});
  wa.receiver=input=>{const result=agent.receive(input);pending.push(result);return result;};await wa.connect();t.after(async()=>{agent.followups.close();await wa.close();store.close();});
+ // Fresh test messages must not predate the transport's real-time ready boundary.
+ client.on('ready',()=>{clock=Math.max(clock,Date.now());});
  const emit=(body,from,extra={})=>{const message={body,from,type:'chat',id:{_serialized:randomUUID(),fromMe:false},timestamp:Math.floor(clock/1000),_data:{isNewMsg:true,notifyName:'Cliente de teste'},...extra};client.emit('message',message);return message;};
  return{store,agent,client,wa,emit,advance:ms=>{clock+=ms;},drain:()=>Promise.all(pending.splice(0))};
 }

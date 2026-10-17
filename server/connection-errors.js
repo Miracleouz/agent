@@ -6,6 +6,8 @@ export function safeConnectionDetail(error){
 export function connectionError(error){
  const text=String(typeof error==='string'?error:error?.message||error?.code||'');
  const categories=[
+  ['connection_timeout',/COTA_CONNECTION_TIMEOUT/i,'A conexão com o WhatsApp não ficou pronta dentro do prazo. Confira a etapa exibida no painel e os logs atuais. Você pode tentar conectar novamente; a sessão e o histórico foram preservados.'],
+  ['browser_close_timeout',/COTA_BROWSER_CLOSE_TIMEOUT/i,'A tentativa anterior não encerrou o navegador a tempo. Reinicie o serviço do Cota antes de tentar conectar novamente. A sessão e o histórico foram preservados.'],
   ['auth_modules',/COTA_AUTH_MODULES_UNAVAILABLE|Cannot read properties of (?:null|undefined) \(reading '(?:Socket|Cmd|Conn|OfflineMessageHandler)'\)/i,'O WhatsApp Web não disponibilizou os componentes de autenticação a tempo. Clique em Gerar QR Code para abrir uma nova tentativa; a sessão e o histórico foram preservados.'],
   ['page_reloaded',/COTA_AUTH_DOCUMENT_CHANGED|detached Frame|Execution context was destroyed|Cannot find context with specified id/i,'A página do WhatsApp foi recarregada durante a conexão. Clique em Gerar QR Code para tentar novamente; a sessão e o histórico foram preservados.'],
   ['profile_busy',/SingletonLock.*(?:File exists|already|EEXIST)|ProcessSingleton|profile.*(?:in use|another)|user data directory.*in use|browser is already running/i,'O perfil do Chromium está ocupado ou ficou bloqueado após um reinício. Pare instâncias duplicadas e consulte o log antes de alterar os arquivos da sessão.'],
