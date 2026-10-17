@@ -61,3 +61,5 @@ Em 16/10/2026, foram aprovados **2.186 testes de servidor**, incluindo **48 test
 O comando `npm run whatsapp:diagnose` foi executado com Chromium real e gerou um QR, sem pareamento e sem mensagens. A máquina do usuário ainda precisa ser verificada com seus próprios logs. A imagem Docker não foi construída neste ambiente.
 
 Na versão 1.15.5, `profile_busy` também oferece **Recuperar conexão** no painel, com confirmação e manutenção restrita aos links antigos. `browser_close_timeout` impede abrir outro navegador enquanto o encerramento falhou; `logout_failed` informa que a desvinculação não foi confirmada. Veja [DESCONECTAR_E_RECUPERAR_QR.md](DESCONECTAR_E_RECUPERAR_QR.md).
+
+Na versão 1.15.6, a recuperação diferencia perfil ativo, verificação de processos indisponível, permissões, formato inesperado, diretório incorreto e alteração concorrente. O log inclui `[WhatsApp profile] stage=... code=...`, preservando a causa sem expor conteúdo da sessão. A identificação do docker-init foi corrigida e reproduzida em Docker; veja [RECUPERACAO_DOCKER_INIT.md](RECUPERACAO_DOCKER_INIT.md).

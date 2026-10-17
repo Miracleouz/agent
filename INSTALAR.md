@@ -201,3 +201,5 @@ A versão **1.15.3** aguarda os componentes de autenticação antes de gerar o Q
 A versão **1.15.4** mostra o progresso da conexão e limita a preparação inteira, inclusive a abertura do navegador e o carregamento inicial da página. Um recurso opcional pendente deixa de impedir o QR. Ao aparecer o QR, a espera pela leitura fica sob as regras do próprio WhatsApp. Veja [CARREGAMENTO_QR.md](docs/CARREGAMENTO_QR.md).
 
 Na versão 1.15.5, **WhatsApp → Recuperar conexão** permite remover bloqueios antigos após confirmar que outras instâncias da mesma sessão estão paradas. Desconectar agora aguarda o navegador e informa falhas sem mostrar sucesso falso. Veja [DESCONECTAR_E_RECUPERAR_QR.md](docs/DESCONECTAR_E_RECUPERAR_QR.md).
+
+A versão 1.15.6 corrige a identificação do docker-init durante a recuperação, validada também em contêiner com usuário node e volume persistente. Atualize, confira a versão, pressione Ctrl+F5 e use Recuperar conexão para remover bloqueios antigos. Veja [RECUPERACAO_DOCKER_INIT.md](docs/RECUPERACAO_DOCKER_INIT.md).

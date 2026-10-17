@@ -1,6 +1,6 @@
-# Atualizar para a versão 1.15.5 no Docker
+# Atualizar para a versão 1.15.6 no Docker
 
-A versão 1.15.5 corrige o falso sucesso ao desconectar, impede conexões concorrentes durante o encerramento e acrescenta recuperação de bloqueios antigos pelo painel. Veja [DESCONECTAR_E_RECUPERAR_QR.md](docs/DESCONECTAR_E_RECUPERAR_QR.md). O limite e o progresso de carregamento da versão anterior continuam ativos.
+A versão 1.15.6 corrige a recusa da recuperação em Docker com `init: true`: o `docker-init` era confundido com outra instância do Cota. A correção foi validada em Docker com usuário `node`, incluindo os cliques do painel e recriação com o mesmo volume. Veja [RECUPERACAO_DOCKER_INIT.md](docs/RECUPERACAO_DOCKER_INIT.md). A confirmação real de desconexão, o limite e o progresso de carregamento continuam ativos.
 
 Use a instalação que já está funcionando. O ZIP contém o código; estoque, usuários, conversas e sessão do WhatsApp permanecem no volume existente.
 
@@ -12,7 +12,7 @@ Use a instalação que já está funcionando. O ZIP contém o código; estoque, 
 docker compose stop -t 30 cota
 ```
 
-4. Copie o conteúdo da pasta extraída (`agent-<código>` no download do GitHub ou `cota-whatsapp-1.15.5` no pacote local) para a pasta da instalação atual, substituindo os arquivos do código. O `compose.yaml`, o `Dockerfile`, `server` e `src` devem ficar diretamente na pasta atual, sem criar outra pasta dentro dela. Preserve seu `.env`, dados locais e eventuais ajustes próprios de porta, domínio ou volumes no `compose.yaml`.
+4. Copie o conteúdo da pasta extraída (`agent-<código>` no download do GitHub ou `cota-whatsapp-1.15.6` no pacote local) para a pasta da instalação atual, substituindo os arquivos do código. O `compose.yaml`, o `Dockerfile`, `server` e `src` devem ficar diretamente na pasta atual, sem criar outra pasta dentro dela. Preserve seu `.env`, dados locais e eventuais ajustes próprios de porta, domínio ou volumes no `compose.yaml`.
 5. Na mesma pasta e usando o mesmo projeto Compose da instalação anterior, execute:
 
 ```powershell
@@ -34,7 +34,7 @@ docker compose logs --tail=100 cota
 docker compose exec cota node -p "require('./package.json').version"
 ```
 
-Deve mostrar `1.15.5`.
+Deve mostrar `1.15.6`.
 
 8. Para o erro **profile_busy**, abra **WhatsApp → Recuperar conexão** após confirmar que todas as outras instâncias que usam a mesma sessão estão paradas. Marque a confirmação e clique em **Recuperar e gerar QR**. A atualização do código sozinha não remove links de bloqueio antigos; esse passo os recupera preservando os dados. Se o erro for **browser_close_timeout**, reinicie o serviço antes de tentar novamente:
 
@@ -60,4 +60,4 @@ Nesta versão, o atendimento automático envia um único aviso e encerra após c
 
 Não execute `docker compose down -v` nem exclua o volume `cota-data`. O nome real do volume costuma incluir o nome do projeto Compose. Mantenha a mesma instalação/projeto para preservar estoque, acessos, histórico e sessão. Caso a sessão de WhatsApp tenha expirado, gere um novo QR no painel.
 
-O pacote foi verificado com 3.337 testes automatizados, 46 testes de navegador e build de produção. A imagem Docker precisa ser construída no seu host pelo comando acima; não foi executado um build Docker neste ambiente.
+O pacote foi verificado com 3.361 testes automatizados, 48 testes de navegador e build de produção. A imagem também foi construída e passou 18 verificações de integração em Docker com init, usuário node e volume persistente, usando módulos de WhatsApp simulados e sem parear número. Construa a imagem na sua instalação pelo comando acima.

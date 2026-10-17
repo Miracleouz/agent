@@ -10,7 +10,7 @@ import {WhatsAppAvatars} from './whatsapp-avatars.js';
 import {sendConfirmed} from './whatsapp-send.js';
 import {WhatsAppClient} from './whatsapp-client.js';
 import {connectionStageLabel} from './connection-progress.js';
-import {recoverProfile} from './whatsapp-profile.js';
+import {recoverProfile,profileRecoveryError} from './whatsapp-profile.js';
 const {LocalAuth,MessageMedia}=wa;
 function bounded(operation,timeout,code){return new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error(code)),timeout);Promise.resolve().then(operation).then(value=>{clearTimeout(timer);resolve(value);},()=>{clearTimeout(timer);reject(new Error(code));});});}
 const closures=new WeakMap();
@@ -162,7 +162,7 @@ export class WhatsApp {
    if(this.client){await closeClient(this.client,this.cleanupTimeout);this.client=null;}
    await recoverProfile(this.dataDir,{clear:true,offlineConfirmed:true});
    this.stage=null;this.update('disconnected');return await this.startConnection();
-  }catch(error){const failure=error.message==='COTA_BROWSER_CLOSE_TIMEOUT'?error:new Error('COTA_PROFILE_RECOVERY_FAILED');this.connectionFailed(failure);throw Object.assign(new Error(this.error),{status:409});}
+  }catch(error){const failure=error.message==='COTA_BROWSER_CLOSE_TIMEOUT'?error:profileRecoveryError(error);this.logger.error(`[WhatsApp profile] stage=${failure.stage||'browser_close'} code=${failure.code||'COTA_BROWSER_CLOSE_TIMEOUT'}${failure.fsCode?' fs='+failure.fsCode:''}`);this.connectionFailed(failure);throw Object.assign(new Error(this.error),{status:409});}
  }
  async close(){++this.generation;this.clearStartup();this.syncer.reset();this.readSync.reset();this.avatars.reset();await this.connecting?.catch(()=>{});await this.disconnecting?.catch(()=>{});await this.recovering?.catch(()=>{});++this.generation;this.clearStartup();if(this.client)await closeClient(this.client,this.cleanupTimeout).catch(()=>{});}
 }
