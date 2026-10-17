@@ -205,3 +205,5 @@ Na versão 1.15.5, **WhatsApp → Recuperar conexão** permite remover bloqueios
 A versão 1.15.6 corrige a identificação do docker-init durante a recuperação, validada também em contêiner com usuário node e volume persistente. Atualize, confira a versão, pressione Ctrl+F5 e use Recuperar conexão para remover bloqueios antigos. Veja [RECUPERACAO_DOCKER_INIT.md](docs/RECUPERACAO_DOCKER_INIT.md).
 
 Na versão **1.15.7**, o QR ignora também cache HTTP e service worker antigos. Se o diagnóstico temporário funciona, mas a conexão salva continua falhando, use **Recriar conexão** para guardar o perfil atual e preparar um novo QR. Estoque, usuários e histórico do painel são preservados. Veja [PERFIL_SALVO_E_NOVO_QR.md](docs/PERFIL_SALVO_E_NOVO_QR.md).
+
+A versão **1.16.0** corrige mensagens em tempo real e consulta dos últimos 30 dias. A atualização reutiliza a sessão conectada. Veja [TEMPO_REAL_E_HISTORICO_30_DIAS.md](docs/TEMPO_REAL_E_HISTORICO_30_DIAS.md).

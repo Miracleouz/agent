@@ -67,6 +67,8 @@ No painel, abra **WhatsApp → Gerar QR Code**. No celular, abra **Aparelhos con
 
 Se o QR não aparecer, consulte [Diagnóstico do QR](docs/DIAGNOSTICO_QR.md). O painel diferencia falhas de navegador, perfil ocupado, rede, certificados e permissões; `npm run whatsapp:diagnose` testa um perfil temporário sem parear números ou usar a sessão existente. No Docker, use `docker compose exec cota npm run whatsapp:diagnose`.
 
+A versão **1.16.0** acompanha entradas e saídas do WhatsApp em tempo real, mantém a atualização do painel durante importações e consulta os últimos 30 dias em Conversas, Contatos e grupos. Veja [TEMPO_REAL_E_HISTORICO_30_DIAS.md](docs/TEMPO_REAL_E_HISTORICO_30_DIAS.md).
+
 A versão **1.15.7** evita o cache HTTP/service worker antigo no perfil salvo e oferece **Recriar conexão**, guardando o perfil anterior e preparando outro QR sem substituir estoque, usuários ou histórico do painel. Veja [PERFIL_SALVO_E_NOVO_QR.md](docs/PERFIL_SALVO_E_NOVO_QR.md).
 
 A sessão fica em `data/whatsapp`. Para reconectar automaticamente após reiniciar, defina `WHATSAPP_AUTO_CONNECT=true`. Se o aparelho revogar ou expirar a sessão, leia um novo QR. Uma sessão deve ser usada por uma única instância do servidor.
@@ -140,6 +142,8 @@ npm run test:ui
 ```
 
 Os testes de navegador usam o Chromium local (`CHROME_PATH` pode sobrescrever) e um servidor/banco temporário isolado na porta 3101. Cobrem cadastro, cinco opções, paginação, alerta de atendente, resposta manual, reativação, importação confirmada e layout móvel. Não dependem de um número de WhatsApp nem enviam mensagens a clientes. A geração de um QR real foi validada separadamente; pareamento e entrega a um contato real dependem da leitura pelo dono e não foram feitos automaticamente.
+
+Na versão **1.16.0**, passaram **3.684 testes de servidor**, **51 testes de navegador** e o build. Os **312 testes novos de tempo real** também passaram dentro da imagem Docker; outras **23 verificações** cobriram conexão, recuperação e desconexão. Os testes usam modelos de WhatsApp simulados e incluem Chromium real, sem parear números. Veja o [relatório de tempo real e histórico de 30 dias](docs/TEMPO_REAL_E_HISTORICO_30_DIAS.md).
 
 Na versão **1.15.7**, passaram **3.372 testes de servidor**, **49 testes de navegador** e o build de produção. O QR real foi gerado sem pareamento ou envio. A [correção do perfil salvo e recriação com backup](docs/PERFIL_SALVO_E_NOVO_QR.md) inclui reprodução de service worker e cache HTTP antigos em Chromium real, preservação de credenciais e recuperação pelo painel.
 

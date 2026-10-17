@@ -40,7 +40,7 @@ export function createApp({store,whatsapp,production=false,appUrl=process.env.AP
   res.json({currentUser:req.user,settings:admin?settings:{businessName:settings.businessName,agentEnabled:settings.agentEnabled,pauseMinutes:settings.pauseMinutes},stats,chats,groups:connected?store.groupList():[],typing:presence().filter(item=>visibleIds.has(item.chatId)),team:admin?store.all('SELECT id,name,role FROM users WHERE active=1 ORDER BY name'):[],connection:admin?connection:{status:connection.status,number:connection.number},imports:admin?store.all('SELECT * FROM imports ORDER BY created DESC LIMIT 8'):[],events:admin?store.all('SELECT * FROM events ORDER BY created DESC LIMIT 12'):[]});
  });
  app.get('/api/events',(req,res)=>{
-  res.set({'Content-Type':'text/event-stream','Connection':'keep-alive','X-Accel-Buffering':'no'});res.flushHeaders();res.write('event: ready\ndata: {}\n\n');
+  res.set({'Content-Type':'text/event-stream','Connection':'keep-alive','X-Accel-Buffering':'no','Cache-Control':'no-store, no-transform'});res.flushHeaders();res.write('retry: 1000\nevent: ready\ndata: {}\n\n');
   const onChange=()=>{if(!accounts.getUser(req)){res.end();return;}res.write('event: change\ndata: {}\n\n');};store.on('change',onChange);
   const keepalive=setInterval(()=>{if(!accounts.getUser(req)){res.end();return;}res.write(': heartbeat\n\n');},25000);
   req.on('close',()=>{clearInterval(keepalive);store.off('change',onChange);});
@@ -52,12 +52,12 @@ export function createApp({store,whatsapp,production=false,appUrl=process.env.AP
  function connectedWhatsApp(){if(whatsapp.snapshot().status!=='ready')throw fail('Conecte o WhatsApp para acessar conversas, histórico e contatos.',409);}
  function getChat(id){const chat=store.chat(id);if(!chat)throw fail('Conversa não encontrada.',404);if(chat.channel!=='simulator')connectedWhatsApp();return chat;}
  function visibleChat(req){const chat=getChat(req.params.id);if(req.user.role!=='admin'&&chat.assigned_user_id&&chat.assigned_user_id!==req.user.id)throw fail('Esta conversa está com outro usuário.',403);return chat;}
- app.get('/api/chats/:id/messages',(req,res)=>{const chat=visibleChat(req);whatsapp.loadHistory?.(chat).catch(()=>{});whatsapp.avatars?.refresh([chat.phone]).catch(()=>{});res.json(store.messages(req.params.id));});
+ app.get('/api/chats/:id/messages',(req,res)=>{const chat=visibleChat(req);whatsapp.loadHistory?.(chat).catch(()=>{});whatsapp.avatars?.refresh([chat.phone]).catch(()=>{});res.json(store.conversationMessages(req.params.id));});
  app.get('/api/chats/:id/avatar',(req,res)=>{const chat=visibleChat(req);sendAvatar(store,res,chat.phone);});
  app.post('/api/chats/:id/history',(req,res)=>{const chat=visibleChat(req);z.object({}).strict().parse(req.body||{});whatsapp.loadHistory?.(chat,{force:true}).catch(()=>{});res.status(202).json({ok:true});});
  app.post('/api/chats/:id/read',async(req,res)=>{const chat=visibleChat(req),{force=false}=z.object({force:z.boolean().optional()}).strict().parse(req.body||{});if(chat.assigned_user_id===req.user.id){store.run('UPDATE chats SET unread=0 WHERE id=?',chat.id);store.changed();}const sync=await whatsapp.markRead?.(chat,{force});res.json({ok:true,sync:sync||null});});
  function getGroup(id){connectedWhatsApp();const group=store.get('SELECT id FROM whatsapp_groups WHERE id=?',id);if(!group)throw fail('Grupo não encontrado.',404);return group;}
- app.get('/api/groups/:id/messages',(req,res)=>{getGroup(req.params.id);whatsapp.avatars?.refresh([req.params.id]).catch(()=>{});res.json(store.groupMessages(req.params.id));});
+ app.get('/api/groups/:id/messages',(req,res)=>{getGroup(req.params.id);whatsapp.loadGroupHistory?.(req.params.id).catch(()=>{});whatsapp.avatars?.refresh([req.params.id]).catch(()=>{});res.json(store.groupMessages(req.params.id,{since:Date.now()-30*86400000,limit:null}));});
  app.get('/api/groups/:id/avatar',(req,res)=>{getGroup(req.params.id);sendAvatar(store,res,req.params.id);});
  app.post('/api/groups/:id/read',async(req,res)=>{getGroup(req.params.id);const{force=false}=z.object({force:z.boolean().optional()}).strict().parse(req.body||{});store.run('UPDATE whatsapp_groups SET unread=0 WHERE id=?',req.params.id);store.changed();const sync=await whatsapp.markRead?.({id:req.params.id,phone:req.params.id,channel:'group'},{force});res.json({ok:true,sync:sync||null});});
  function queued(req,fn){const original=getChat(req.params.id);return agent.enqueue(`${original.provider}:${original.channel}:${original.phone}`,()=>{

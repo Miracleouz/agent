@@ -2,6 +2,7 @@ import wa from 'whatsapp-web.js';
 import QRCode from 'qrcode';
 import {existsSync} from 'node:fs';
 import {join} from 'node:path';
+import {randomUUID} from 'node:crypto';
 import {photoInfo,maxPhotoBytes} from './images.js';
 import {connectionError,safeConnectionDetail,authenticationTimeout} from './connection-errors.js';
 import {WhatsAppSync} from './whatsapp-sync.js';
@@ -59,7 +60,7 @@ export class WhatsApp {
   client.on('ready',()=>{if(this.generation!==generation||this.status==='error')return;readyAt=Math.floor(Date.now()/1000);this.readyAt=readyAt;this.qr=null;this.number=client.info?.wid?.user||null;this.update('ready');this.progress('ready');this.store.event('whatsapp','WhatsApp conectado.');this.syncer.run().catch(error=>{if(this.generation===generation)this.syncer.report(error);});});
   client.on('auth_failure',()=>{if(this.generation===generation)this.update('error','A sessão expirou. Desconecte e leia um novo QR Code.');});
   client.on('disconnected',()=>{if(this.generation===generation&&this.status!=='error'){this.syncer.reset();this.readSync.reset();this.avatars.reset();this.qr=null;this.number=null;this.update('disconnected','A conexão foi encerrada. Conecte novamente no painel.');}});
-  client.on('message',message=>{
+  const received=message=>{
    if(this.generation!==generation||this.client!==client||this.status!=='ready'||readyAt===null)return;
    const group=/^\d+(?:-\d+)?@g\.us$/.test(message.from);
    if(message.fromMe||message.id?.fromMe||message.isStatus||!group&&!/^\d+@(c\.us|lid|s\.whatsapp\.net)$/.test(message.from))return;
@@ -75,20 +76,45 @@ export class WhatsApp {
    if(group){this.store.addGroupMessage({id:message.from,providerId:message.id._serialized,author:message._data?.notifyName||message.author?.replace(/@.*$/,'')||'Participante',body:attachment?'[Áudio ou anexo recebido no grupo]':body,created:message.timestamp*1000});return;}
    const mapped=this.store.get("SELECT c.phone FROM whatsapp_chat_aliases a JOIN chats c ON c.id=a.chat_id WHERE a.alias=? AND c.channel='whatsapp' AND c.provider='qr'",message.from);
    const processing=this.receiver?.({phone:mapped?.phone||message.from,name:message._data?.notifyName||message.from.replace(/@.*$/,''),body,forceHuman:attachment,providerId:message.id._serialized,channel:'whatsapp',provider:'qr'});
-   processing?.catch(()=>{if(this.generation===generation)this.store.event('error','Falha no processamento de uma mensagem recebida. Verifique a conversa.');});
+   processing?.catch(error=>{if(this.generation===generation){this.logger.error(`[WhatsApp live] receive_failed: ${safeConnectionDetail(error)}`);this.store.event('error','Falha no processamento de uma mensagem recebida. Verifique a conversa.');}});
    if(message.type==='image'&&typeof message.downloadMedia==='function'&&processing){
     const task=processing.then(async result=>{
-     if(!result.chatId||result.duplicate||result.ignored)return;
+     const existing=result.duplicate?this.store.get("SELECT chat_id,media_type FROM messages WHERE provider_id=? AND direction='in' AND inbound_verified=1",message.id._serialized):null;
+     const chatId=result.chatId||existing?.chat_id;if(!chatId||result.ignored||existing?.media_type)return;
      const media=await message.downloadMedia();if(this.generation!==generation||this.client!==client||!media?.data||media.data.length>Math.ceil(maxPhotoBytes*4/3)+4)return;
      const data=Buffer.from(media.data,'base64'),info=photoInfo(data);
-     this.store.run("UPDATE messages SET media_type=?,media_name=?,media_size=?,media_data=?,body=? WHERE provider_id=? AND chat_id=? AND direction='in' AND inbound_verified=1",info.type,'foto.'+info.extension,data.length,data,String(message.body||'').slice(0,4000),message.id._serialized,result.chatId);this.store.changed();
+     this.store.run("UPDATE messages SET media_type=?,media_name=?,media_size=?,media_data=?,body=? WHERE provider_id=? AND chat_id=? AND direction='in' AND inbound_verified=1",info.type,'foto.'+info.extension,data.length,data,String(message.body||'').slice(0,4000),message.id._serialized,chatId);this.store.changed();
     }).catch(()=>{});this.mediaTasks.add(task);task.finally(()=>this.mediaTasks.delete(task));
    }
-  });
+  };
+  client.on('message',received);
+  client.on('cota_live_message',message=>{if(message?.fromMe)this.mirrorOutgoing(message,client,generation);else received(message);});
+  client.on('message_create',message=>{if(!client.cotaLiveEvents)this.mirrorOutgoing(message,client,generation);});
+  client.on('cota_live_error',()=>{if(this.generation===generation&&this.client===client)this.logger.error('[WhatsApp live] message_model_unavailable');});
   Promise.resolve().then(()=>client.initialize()).catch(error=>{if(this.generation===generation&&this.client===client&&this.status!=='error')this.connectionFailed(error);});
   return this.snapshot();
  }
  sync(){return this.syncer.run();}
+ loadGroupHistory(id){return this.syncer.groupHistory(id);}
+ mirrorOutgoing(message,client=this.client,generation=this.generation){
+  const active=()=>this.client===client&&this.generation===generation&&this.status==='ready';
+  if(!active()||message?.cotaOrigin||message?.fromMe!==true&&message?.id?.fromMe!==true||message.isStatus||message._data?.isNewMsg===false||!Number.isFinite(message.timestamp)||message.timestamp<this.readyAt)return;
+  const phone=message.to,providerId=message.id?._serialized;
+  if(!['chat','image','audio','ptt','video','document','sticker','location','vcard','multi_vcard'].includes(message.type))return;
+  if(/^\d+(?:-\d+)?@g\.us$/.test(phone||'')&&providerId){const body=String(message.body||'[Anexo enviado pelo WhatsApp]').trim();this.store.addGroupMessage({id:phone,providerId,author:'Enviado pelo WhatsApp',body,created:message.timestamp*1000,incoming:false});return;}
+  if(!/^\d+@(c\.us|lid|s\.whatsapp\.net)$/.test(phone||'')||!providerId||![ 'chat','image','audio','ptt','video','document','sticker','location','vcard','multi_vcard'].includes(message.type))return;
+  if([client.info?.wid?._serialized,client.info?.lid?._serialized].includes(phone))return;
+  let chat=this.readSync.find(phone);
+  if(!chat){const id=randomUUID();this.store.run("INSERT INTO chats(id,phone,name,channel,provider,updated,last_inbound,unread) VALUES(?,?,?,'whatsapp','qr',?,0,0)",id,phone,phone.split('@')[0],Date.now());chat=this.store.chat(id);this.store.run('INSERT OR IGNORE INTO whatsapp_chat_aliases VALUES(?,?)',phone,id);}
+  const update=()=>{if(!active()||this.store.get('SELECT id FROM messages WHERE provider_id=?',providerId))return;
+   const body=String(message.body||(message.type==='chat'?'':'[Anexo enviado pelo WhatsApp]')).trim().slice(0,10000);if(!body)return;
+   const observedAt=Date.now();this.store.run("INSERT OR IGNORE INTO messages(id,chat_id,provider_id,direction,body,status,created,author_name,inbound_verified,provider_ack,sent_at) VALUES(?,?,?,'owner',?,'external',?,'Enviado pelo WhatsApp',0,?,?)",randomUUID(),chat.id,providerId,body,observedAt,Number.isInteger(message.ack)&&message.ack>=0&&message.ack<=4?message.ack:null,message.timestamp*1000);
+   // Mirroring a phone/Web reply does not claim the chat or authorize the bot.
+   // Manual mode remains an explicit panel action; cancel an obsolete reminder.
+   this.store.run('UPDATE chats SET updated=MAX(updated,?) WHERE id=?',observedAt,chat.id);this.store.cancelFollowups(chat.id);this.store.changed();
+  };
+  const task=this.enqueueSideEffect?this.enqueueSideEffect(chat,update):Promise.resolve().then(update);task.catch(()=>this.logger.error('[WhatsApp live] outbound_sync_failed'));return task;
+ }
  loadHistory(chat,options){return this.syncer.history(chat,options);}
  loadContactHistory(person,options){return this.syncer.contact(person,options);}
  markRead(chat,options){return this.readSync.mark(chat,options);}

@@ -2,7 +2,7 @@ import {randomUUID} from 'node:crypto';
 import {normalizeContactPhone} from './contacts.js';
 import {safeConnectionDetail} from './connection-errors.js';
 import {readCachedRoster,cachedIdentities} from './whatsapp-roster.js';
-import {basicChat,readCachedHistory} from './whatsapp-history.js';
+import {basicChat,readCachedHistory,requestCachedHistory} from './whatsapp-history.js';
 const privateId=id=>/^\d+@(c\.us|lid|s\.whatsapp\.net)$/.test(id||'');
 const groupId=id=>/^\d+(?:-\d+)?@g\.us$/.test(id||'');
 const idOf=value=>value?.id?._serialized;
@@ -11,7 +11,7 @@ export const historyDays=30,historyWindow=historyDays*86400000;
 function bounded(fn,signal,ms){return new Promise((resolve,reject)=>{let done=false;const finish=(error,result)=>{if(done)return;done=true;clearTimeout(timer);signal.removeEventListener('abort',abort);error?reject(error):resolve(result);},abort=()=>finish(new Error('Sincronização cancelada.')),timer=setTimeout(()=>finish(new Error('Tempo limite ao consultar dados do WhatsApp.')),ms);signal.addEventListener('abort',abort,{once:true});if(signal.aborted)return abort();Promise.resolve().then(fn).then(result=>finish(null,result),finish);});}
 export class WhatsAppSync{
  constructor(whatsapp,{timeout=20000,historyTimeout=60000,autoInterval=300000,retryInterval=30000}={}){this.wa=whatsapp;this.store=whatsapp.store;this.timeout=timeout;this.historyTimeout=historyTimeout;this.autoInterval=autoInterval;this.retryInterval=retryInterval;this.reset();}
- reset(){clearTimeout(this.autoTimer);this.nextSyncAt=null;this.controller?.abort();this.controller=new AbortController();this.promise=null;this.histories=new Map();this.historyLoading=new Set();this.historyAt=new Map();this.phoneRequests=new Map();this.contactRequests=new Map();this.remotes=new Map();this.state={status:'idle',chats:0,groups:0,contacts:0,completedAt:null,error:null,historyDays,historiesDone:0,historiesTotal:0,stage:'lists'};}
+ reset(){clearTimeout(this.autoTimer);this.nextSyncAt=null;this.controller?.abort();this.controller=new AbortController();this.promise=null;this.histories=new Map();this.groupHistories=new Map();this.historyLoading=new Set();this.historyAt=new Map();this.phoneRequests=new Map();this.contactRequests=new Map();this.remotes=new Map();this.state={status:'idle',chats:0,groups:0,contacts:0,completedAt:null,error:null,historyDays,historiesDone:0,historiesTotal:0,stage:'lists'};}
  snapshot(){return{...this.state,automatic:true,nextSyncAt:this.nextSyncAt||null,issues:[...(this.state.issues||[])]};}
  schedule(client,generation,signal){if(!this.active(client,generation)||signal.aborted)return;clearTimeout(this.autoTimer);const delay=this.state.status==='ready'?this.autoInterval:this.retryInterval;this.nextSyncAt=Date.now()+delay;this.autoTimer=setTimeout(()=>{this.nextSyncAt=null;if(this.active(client,generation)&&!signal.aborted)this.run().catch(()=>{});},delay);this.autoTimer.unref?.();}
  active(client,generation){return this.wa.client===client&&this.wa.generation===generation&&this.wa.status==='ready';}
@@ -19,6 +19,7 @@ export class WhatsAppSync{
  issue(stage,code,message){if(!this.state.issues)this.state.issues=[];if(!this.state.issues.some(issue=>issue.stage===stage&&issue.code===code))this.state.issues.push({stage,code,message});}
  async roster(client,kind,signal){
   const method=kind==='chats'?'getChats':'getContacts';let original;
+  if(client.cotaLiveEvents)try{const result=await bounded(()=>readCachedRoster(client,kind),signal,this.timeout);if(result.items.length){if(result.skipped)this.issue(kind,'items_skipped','Alguns itens não puderam ser lidos; os demais foram carregados.');this.state[kind+'Source']='cache';return result.items;}}catch(error){if(signal.aborted)throw error;this.report(error,kind+'_cache');}
   try{const items=await bounded(()=>typeof client[method]==='function'?client[method]():[],signal,this.timeout);if(!Array.isArray(items))throw new Error('Resposta da lista inválida.');if(items.length||typeof client.pupPage?.evaluate!=='function')return items;original=new Error('A consulta retornou uma lista vazia.');}
   catch(error){if(signal.aborted)throw error;original=error;}
   this.report(original,kind);
@@ -86,7 +87,7 @@ export class WhatsAppSync{
   const providerId=idOf(message),created=stamp(message.timestamp);if(!providerId||!created||created<(this.cutoff||Date.now()-historyWindow)||message.isStatus)return;
   const incoming=!(message.fromMe||message.id?.fromMe),from=message.from,to=message.to;
   // A live inbound must reach the verified receiver first; a history read cannot consume it.
-  if(incoming&&(!Number.isFinite(this.wa.readyAt)||message.timestamp>=this.wa.readyAt))return;
+  if(!Number.isFinite(this.wa.readyAt)||message.timestamp>=this.wa.readyAt)return;
   // Check the original conversation, not the message text, before storing a snapshot.
   const target=incoming?from:to,alias=target&&this.store.get('SELECT chat_id FROM whatsapp_chat_aliases WHERE alias=?',target);if(target!==chat.phone&&alias?.chat_id!==chat.id)return;
   const text=['chat','buttons_response','list_response','template_button_reply'].includes(message.type),media=['image','audio','ptt','video','document','sticker','location','vcard','multi_vcard'].includes(message.type);if(!text&&!media)return;
@@ -108,6 +109,17 @@ export class WhatsAppSync{
   }catch(error){if(this.active(client,generation)&&!signal.aborted){this.report(error,'contact_history');entry.error='Não foi possível consultar o histórico deste contato. Tente Carregar histórico novamente.';}}
   finally{entry.pending=false;if(this.active(client,generation)&&!signal.aborted)this.store.changed();}})();return entry.task;
  }
+ groupHistory(id){
+  if(this.wa.status!=='ready'||!groupId(id)||typeof this.wa.client?.pupPage?.evaluate!=='function')return Promise.resolve();
+  this.groupHistories??=new Map();const prior=this.groupHistories.get(id);if(prior&&(prior.pending||Date.now()-prior.at<15000))return prior.task;
+  const client=this.wa.client,generation=this.wa.generation,signal=this.controller.signal,entry={pending:true,at:Date.now()},cutoff=Date.now()-historyWindow;this.groupHistories.set(id,entry);
+  entry.task=(async()=>{try{let limit=200;const seen=new Set();while(this.active(client,generation)&&!signal.aborted){
+   const result=await bounded(()=>readCachedHistory(client,id,limit,cutoff),signal,this.historyTimeout);if(!this.active(client,generation)||signal.aborted)return;
+   let added=0,oldest=Infinity;this.store.transaction(()=>{for(const message of result.messages){const providerId=idOf(message),created=stamp(message.timestamp);if(created)oldest=Math.min(oldest,created);if(!providerId||seen.has(providerId))continue;seen.add(providerId);added++;const own=message.fromMe||message.id?.fromMe;if((own?message.to:message.from)!==id||!created||created<cutoff||message.timestamp>=this.wa.readyAt||message.isStatus)continue;
+    const text=['chat','buttons_response','list_response','template_button_reply'].includes(message.type),media=['image','audio','ptt','video','document','sticker'].includes(message.type);if(!text&&!media)continue;const body=String(message.body||(media?'[Anexo anterior à conexão — disponível no WhatsApp]':'')).trim().slice(0,10000);if(body)this.store.run('INSERT OR IGNORE INTO whatsapp_group_messages VALUES(?,?,?,?,?,?)',randomUUID(),id,providerId,own?'Enviado pelo WhatsApp':message.author||'Participante',body,created);
+   }});this.store.changed();if(oldest<=cutoff||result.messages.length<limit||!added||result.incomplete)break;limit*=2;
+  }}catch(error){if(this.active(client,generation)&&!signal.aborted)this.report(error,'group_history');}finally{entry.pending=false;}})();return entry.task;
+ }
  history(chat,{force=false}={}){
   if(chat.channel!=='whatsapp'||chat.provider!=='qr'||this.wa.status!=='ready')return Promise.resolve();
   const prior=this.store.chat(chat.id);if(this.histories.has(chat.id)&&(this.historyLoading.has(chat.id)||!force&&(prior?.history_status==='complete'||Date.now()-(this.historyAt.get(chat.id)||0)<15000)))return this.histories.get(chat.id);
@@ -119,19 +131,22 @@ export class WhatsAppSync{
    if(!remote&&typeof client.pupPage?.evaluate==='function')remote=basicChat(client,chat.phone);if(!this.active(client,generation)||signal.aborted)return false;if(typeof remote?.fetchMessages!=='function')throw new Error('O WhatsApp não disponibilizou a consulta do histórico deste chat.');this.remotes.set(chat.id,remote);
    let limit=200,oldest=null;const seen=new Set();
    while(this.active(client,generation)&&!signal.aborted){
-    let messages;try{messages=await bounded(()=>remote.fetchMessages({limit}),signal,this.historyTimeout);if(!Array.isArray(messages))throw new Error('Resposta de histórico inválida.');}catch(error){if(!this.active(client,generation)||signal.aborted)return false;this.report(error,'history_sdk');const fallback=await bounded(()=>readCachedHistory(client,idOf(remote)||chat.phone,limit),signal,this.historyTimeout);messages=fallback.messages;if(fallback.skipped)this.issue('history','messages_skipped','Algumas mensagens não puderam ser lidas; as demais foram preservadas.');}
+    let messages,incomplete=false,raw;
+    if(client.cotaLiveEvents)try{raw=await bounded(()=>readCachedHistory(client,idOf(remote)||chat.phone,limit,cutoff),signal,this.historyTimeout);}catch(error){if(signal.aborted)return false;this.report(error,'history_cache');}
+    if(!raw)try{messages=await bounded(()=>remote.fetchMessages({limit}),signal,this.historyTimeout);if(!Array.isArray(messages))throw new Error('Resposta de histórico inválida.');if(!messages.length&&typeof client.pupPage?.evaluate==='function')throw new Error('O SDK não disponibilizou mensagens; consultando a coleção local.');}catch(error){if(!this.active(client,generation)||signal.aborted)return false;this.report(error,'history_sdk');raw=await bounded(()=>readCachedHistory(client,idOf(remote)||chat.phone,limit,cutoff),signal,this.historyTimeout);}
+    if(raw){messages=raw.messages;incomplete=raw.incomplete===true;if(raw.skipped)this.issue('history','messages_skipped','Algumas mensagens não puderam ser lidas; as demais foram preservadas.');}
     if(!this.active(client,generation)||signal.aborted)return false;
     const times=messages.map(message=>stamp(message.timestamp)).filter(Boolean);oldest=times.length?times.reduce((minimum,value)=>Math.min(minimum,value),Infinity):null;let added=0;
     this.store.transaction(()=>{for(const message of messages){const id=idOf(message);if(!id||seen.has(id))continue;seen.add(id);added++;this.importMessage(chat,message);}});this.store.changed();
-    if(oldest!==null&&oldest<=cutoff||messages.length<limit){
+    if(oldest!==null&&oldest<=cutoff||messages.length<limit||!added||incomplete){
      let requested=false;const last=this.phoneRequests.get(chat.id)||0;
-     if(!(oldest!==null&&oldest<=cutoff)&&typeof client.syncHistory==='function'&&Date.now()-last>=300000){this.phoneRequests.set(chat.id,Date.now());try{requested=await bounded(()=>client.syncHistory(idOf(remote)||chat.phone),signal,this.timeout)===true;}catch(error){if(signal.aborted)return false;this.report(error,'history_request');}}
+     if(!(oldest!==null&&oldest<=cutoff)&&typeof client.syncHistory==='function'&&Date.now()-last>=300000){this.phoneRequests.set(chat.id,Date.now());try{requested=await bounded(()=>client.cotaLiveEvents?client.pupPage.evaluate(requestCachedHistory,idOf(remote)||chat.phone):client.syncHistory(idOf(remote)||chat.phone),signal,this.timeout)===true;}catch(error){if(signal.aborted)return false;this.report(error,'history_request');if(typeof client.pupPage?.evaluate==='function')try{requested=await bounded(()=>client.pupPage.evaluate(requestCachedHistory,idOf(remote)||chat.phone),signal,this.timeout)===true;}catch(fallbackError){if(signal.aborted)return false;this.report(fallbackError,'history_request_fallback');}}}
      if(!this.active(client,generation)||signal.aborted)return false;
      const stored=this.store.get('SELECT count(*) n FROM messages WHERE chat_id=? AND created>=?',chat.id,cutoff).n;
-     const waiting=requested||!stored,detail=waiting?'Aguardando o WhatsApp disponibilizar o histórico. A atualização automática tentará novamente.':null;
+     const waiting=requested||!stored||!added||incomplete,detail=waiting?'Aguardando o WhatsApp disponibilizar o histórico. A atualização automática tentará novamente.':null;
      this.store.run('UPDATE whatsapp_history_sync SET status=?,oldest_at=?,last_sync=?,error=? WHERE chat_id=?',oldest!==null&&oldest<=cutoff?'complete':waiting?'waiting':'available',oldest,Date.now(),detail,chat.id);if(waiting){this.issue('history','history_waiting',detail);if(!this.promise){this.state.status='partial';this.state.error=detail;this.schedule(client,generation,signal);}}this.store.changed();return !waiting;
     }
-    if(!added)throw new Error('O WhatsApp repetiu a mesma página sem disponibilizar mensagens mais antigas.');limit*=2;
+    limit*=2;
    }return false;
   }catch(error){if(this.active(client,generation)&&!signal.aborted){this.report(error);this.issue('history','history_incomplete','As listas foram carregadas, mas parte do histórico dos últimos 30 dias não pôde ser concluída. Use Sincronizar WhatsApp para tentar novamente.');const detail='Não foi possível concluir os últimos 30 dias. O histórico salvo foi mantido. Use Sincronizar WhatsApp para continuar.';this.store.run("UPDATE whatsapp_history_sync SET status='partial',error=?,last_sync=? WHERE chat_id=?",detail,Date.now(),chat.id);this.store.event('whatsapp_history_error',detail);}return false;}})();this.histories.set(chat.id,task);task.finally(()=>{if(this.histories.get(chat.id)===task)this.historyLoading.delete(chat.id);}).catch(()=>{});return task;
  }

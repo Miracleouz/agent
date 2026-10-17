@@ -18,7 +18,7 @@ export function cachedRoster(kind){
    items.push(item);
   }else{
    if(!/^\d+@(c\.us|lid|s\.whatsapp\.net)$/.test(id))continue;
-   let getters={},frontend={};try{getters=window.require('WAWebContactGetters');}catch{}try{frontend=window.require('WAWebFrontendContactGetters');}catch{}
+   let getters={},frontend={};try{getters=window.require('WAWebContactGetters')||{};}catch{}try{frontend=window.require('WAWebFrontendContactGetters')||{};}catch{}
    const saved=typeof frontend.getIsMyContact==='function'?frontend.getIsMyContact(model):model.isMyContact;
    if(saved!==true)continue;
    const pn=model.phoneNumber?._serialized,contactId=/^\d+@(c\.us|s\.whatsapp\.net)$/.test(pn||'')?pn:id;

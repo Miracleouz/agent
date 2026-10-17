@@ -1,5 +1,7 @@
 import wa from 'whatsapp-web.js';
 import {randomUUID} from 'node:crypto';
+import {attachLiveBridge} from './whatsapp-live.js';
+import {installExistingChatLookup,installMessageSerializerGuard} from './whatsapp-models.js';
 
 export function authModulesReady(){
  try{
@@ -82,6 +84,12 @@ export class WhatsAppClient extends wa.Client{
   if(this.stopping)return Promise.resolve();
   if(this.injection)return this.injection;
   const task=this.injectWhenReady();this.injection=task;const clear=()=>{if(this.injection===task)this.injection=null;};task.then(clear,clear);return task;
+ }
+ async attachEventListeners(){
+  // Register before the SDK: a throwing full serializer must not prevent the
+  // independent observer from seeing the original new-message event.
+  try{await this.pupPage.evaluate(installExistingChatLookup);await this.pupPage.evaluate(installMessageSerializerGuard);await attachLiveBridge(this);return await super.attachEventListeners();}
+  catch(error){if(!this.stopping)this.emit('cota_connection_error',error);throw error;}
  }
  async injectWhenReady(){
   const page=this.pupPage,signal=this.controller.signal,active=()=>!signal.aborted&&!this.stopping&&this.pupPage===page;

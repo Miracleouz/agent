@@ -6,6 +6,7 @@ export function safeConnectionDetail(error){
 export function connectionError(error){
  const text=String(typeof error==='string'?error:error?.message||error?.code||'');
  const categories=[
+  ['live_events',/COTA_LIVE_(?:COLLECTION|BRIDGE)_UNAVAILABLE|COTA_CHAT_LOOKUP_UNAVAILABLE/i,'O WhatsApp não disponibilizou os componentes de mensagens em tempo real. Reconecte pelo painel e confira o log do serviço. A sessão e o histórico foram preservados.'],
   ['connection_timeout',/COTA_CONNECTION_TIMEOUT/i,'A conexão com o WhatsApp não ficou pronta dentro do prazo. Confira a etapa exibida no painel e os logs atuais. Você pode tentar conectar novamente; a sessão e o histórico foram preservados.'],
   ['browser_close_timeout',/COTA_BROWSER_CLOSE_TIMEOUT/i,'A tentativa anterior não encerrou o navegador a tempo. Reinicie o serviço do Cota antes de tentar conectar novamente. A sessão e o histórico foram preservados.'],
   ['logout_failed',/COTA_LOGOUT_FAILED/i,'O navegador foi fechado, mas o WhatsApp não confirmou a desvinculação. Confira Aparelhos conectados no celular. Ao conectar novamente, a sessão salva pode ser restaurada.'],
