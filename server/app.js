@@ -108,7 +108,7 @@ export function createApp({store,whatsapp,production=false,appUrl=process.env.AP
  draftRoutes({app,store,visibleChat,queued,canControl});
  orderRoutes({app,store,queued,visibleChat,canControl});
  app.post('/api/chats/:id/order/confirm',(req,_res)=>{const chat=getChat(req.params.id);canControl(req,chat);throw fail('Atualize o painel e use Confirmar compra para revisar itens e baixar o estoque.',409);});
- const agent=new Agent(store,(chat,body,actions,options)=>whatsapp.send(chat,body,actions,options),{canSend:chat=>chat.channel==='simulator'||whatsapp.snapshot().status==='ready'});whatsapp.receiver=input=>agent.receive(input);
+ const agent=new Agent(store,(chat,body,actions,options)=>whatsapp.send(chat,body,actions,options),{canSend:chat=>chat.channel==='simulator'||whatsapp.snapshot().status==='ready'});whatsapp.receiver=input=>agent.receive(input);whatsapp.audioReceiver=id=>agent.finishAudio(id);
  whatsapp.enqueueSideEffect=(chat,fn)=>agent.enqueue(`${chat.provider||'qr'}:${chat.channel}:${chat.phone}`,fn);
  contactRoutes({app,store,accounts,agent,whatsapp});
  conversationToolsRoutes({app,store,agent,whatsapp,visibleChat,queued,canControl});

@@ -30,6 +30,7 @@ export class WhatsAppReadSync{
  register(client,generation){
   const active=()=>this.wa.client===client&&this.wa.generation===generation&&this.wa.status==='ready';
   client.on('unread_count',remote=>{if(!active())return;const id=(remote.id?._serialized||remote.id?.$1),chat=this.find(id);if(!chat)return;this.last.delete(chat.id);if(remote.unreadCount!==0)return;
+   if(chat.channel==='whatsapp')this.store.run("UPDATE messages SET audio_agent_state='skipped' WHERE chat_id=? AND audio_agent_state='pending'",chat.id);
    const update=()=>{if(!active())return;const anchor=this.anchor(chat);this.clearThrough(chat,anchor);this.save(chat,anchor,'sent');};if(this.wa.enqueueSideEffect)this.wa.enqueueSideEffect(chat,update).catch(()=>{});else update();
   });
   client.on('message_ack',(message,ack)=>{if(!active()||!message?.fromMe&&!message?.id?.fromMe||!Number.isInteger(ack)||ack<0||ack>4)return;const chat=this.find(message.to),providerId=(message.id?._serialized||message.id?.$1);if(!chat||typeof providerId!=='string'||!providerId||chat.channel!=='whatsapp')return;

@@ -18,7 +18,7 @@ export function installLiveBridge({binding,token}){
   if(!providerId)return invalid('identifier');if(typeof own!=='boolean')return invalid('direction');if(row.isNotification||row.isStatusV3)return invalid('notification');
   const target=own?to:from;if(!/^\d+@(c\.us|lid|s\.whatsapp\.net)$/.test(target||'')&&!/^\d+(?:-\d+)?@g\.us$/.test(target||''))return invalid('destination');
   const cotaOrigin=own&&[...(window.__cotaSendReceiptV1?.attempts.values()||[])].some(receipt=>receipt.id===providerId);
-  return{id:{_serialized:providerId,fromMe:own},fromMe:own,from,to,author:id(row.author),type:row.type,body:String(row.body||row.caption||''),timestamp:Number(row.t),ack:Number.isInteger(row.ack)?row.ack:undefined,cotaOrigin,_data:{isNewMsg:true,notifyName:row.notifyName||''}};
+  return{id:{_serialized:providerId,fromMe:own},fromMe:own,from,to,author:id(row.author),type:row.type,body:String(row.body||row.caption||''),timestamp:Number(row.t),ack:Number.isInteger(row.ack)?row.ack:undefined,cotaOrigin,_data:{isNewMsg:true,isUnread:typeof row.isUnread==='boolean'?row.isUnread:undefined,notifyName:row.notifyName||''}};
  }
  const deliver=row=>{try{const message=snapshot(row);if(!message)return;if(seen.has(message.id._serialized)){stats.duplicates++;return;}stats.delivered++;stats.lastDeliveryAt=Date.now();seen.add(message.id._serialized);if(seen.size>5000)seen.delete(seen.values().next().value);emit({kind:'message',message});}catch{emit({kind:'error'});}};
  const added=row=>{try{

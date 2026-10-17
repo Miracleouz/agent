@@ -1,7 +1,8 @@
+import {audioQuotationText} from './audio-quotation.js';
 import {randomUUID} from 'node:crypto';
 import {normalize,demoProducts,mentionsBrand} from './catalog.js';
 import {parseBeltRequest,productBeltSpec,calculateBeltQuote,formatBeltCalculation,mergeBeltRequest} from './belts.js';
-import {classifyMessage,quoteSearchText} from './intents.js';
+import {classifyMessage,quoteSearchText,conversationText} from './intents.js';
 import {Followups} from './followups.js';
 import {splitBeltRequests} from './requests.js';
 import {helpActions,helpChoice,deliveryMethod,deliveryLabels,pickupQuestion,isPickupDetails,pickupQuoteText} from './conversation.js';
@@ -53,6 +54,15 @@ export function searchProducts(products,query,{includeUnpriced=false,...pricingO
  const first=[],rest=[],seen=new Set();
  for(const {product} of ranked){const brand=normalize(product.brand);if(!seen.has(brand)){first.push(product);seen.add(brand);}else rest.push(product);}
  return [...first,...rest];
+}
+export function isBeltQuotation(body,chat={}){
+ const text=conversationText(body);
+ if(/^(?:ainda )?(?:estou )?aguardando(?: (?:a |o )?(?:cotacao|orcamento|valores|precos))?[.!? ]*$/.test(text))return true;
+ if(/\b(?:correias?|corr|coreias?|sincronizadoras?|sincron|sincr|dentadas?|trapezoidais|frisos?|canais)\b/.test(text))return true;
+ if(/\b(?:\d{0,2}\s*(?:dp[jklm]|p[jklmh]|sp[azbc]|xp[azbc]|[azbcde]|[358]v[x]?|[245]l|at|t|htd|std|rpp|xl|xxl|l|h|xh|xxh))[- /]*\d+\b|\b\d{2,6}[- /]+(?:[sd]?\d+m|xl|xxl|xh|xxh|l|h)\b/.test(text))return true;
+ if(chat.query&&(chat.pending_measure||chat.quoted_options!=='[]')&&/^(?:\d+(?:[.,]\d+)?\s*(?:mm|milimetros?|m|mt|mts|metros?|frisos?|canais|pecas?|unidades?)?\s*)[.!?]*$/.test(text))return true;
+ if(chat.query&&/\b(?:gates|continental|optibelt|dayco|megadyne|goodyear|continental|pix|desconto|pagamento|largura|comprimento|marca)\b/.test(text)&&text.split(/\s+/).length<=12)return true;
+ return /^(?:(?:oi|ola|bom dia|boa tarde|boa noite|quero|queria|preciso|pode|podem|consegue|me|por|favor|gentileza|uma|um|a|o|de|fazer|manda|passa|saber|ver|cotar|cotacao|orcamento|orcar|preco|valor|valores|precos|quanto|custa|fica|sai)[ ,.!?]*)+$/.test(text);
 }
 export const actionMore={id:'more',label:'Ver mais'},actionHuman={id:'human',label:'Falar com atendente'};
 export function intent(text,context){return classifyMessage(text,context).type;}
@@ -108,19 +118,39 @@ export class Agent {
    const chat=this.store.get('SELECT id FROM chats WHERE phone=? AND channel=? AND provider=?',input.phone,input.channel||'whatsapp',input.provider||'qr');
    if(chat)this.store.cancelFollowups(chat.id,{keepMenu:true,keepDelivery:true});
   }
-  return this.enqueue(`${input.provider||'qr'}:${input.channel}:${input.phone}`,async()=>{const result=await this.process(input);if(result.chatId&&!result.closed&&!result.duplicate&&!result.ignored)this.followups.schedule(result.chatId);return result;});
+  return this.enqueue(`${input.provider||'qr'}:${input.channel}:${input.phone}`,async()=>{const result=await this.process(input);if(result.chatId&&!result.closed&&!result.duplicate&&!result.ignored&&!result.deferred&&!result.read&&result.intent!=='out_of_scope')this.followups.schedule(result.chatId);return result;});
  }
- async process({phone,name,body,providerId,channel='whatsapp',provider='qr',isGroup=false,fromMe=false,isStatus=false,forceHuman=false,liveVerified=false}){
-  if(isGroup||fromMe||isStatus||/@g\.us$|@broadcast$|@newsletter$/.test(phone))return{ignored:true};if(!body?.trim())return{ignored:true};const imported=providerId&&this.store.get('SELECT * FROM messages WHERE provider_id=?',providerId);
+ async process({phone,name,body,providerId,channel='whatsapp',provider='qr',isGroup=false,fromMe=false,isStatus=false,forceHuman=false,liveVerified=false,deferAudio=false,alreadyRead=false,canRespond=null,contextBody=null,unreadBatchIds=null}){
+  if(isGroup||fromMe||isStatus||/@g\.us$|@broadcast$|@newsletter$/.test(phone))return{ignored:true};if(!body?.trim())return{ignored:true};if(canRespond&&await canRespond()!==true)return{ignored:true};const imported=providerId&&this.store.get('SELECT * FROM messages WHERE provider_id=?',providerId);
   if(imported&&!(liveVerified===true&&channel==='whatsapp'&&provider==='qr'&&imported.status==='imported'&&imported.direction==='in'&&imported.inbound_verified===0&&this.store.get('SELECT id FROM chats WHERE id=? AND phone=? AND channel=? AND provider=?',imported.chat_id,phone,channel,provider)))return{duplicate:true};this.store.resumeExpired();
   let chat=this.store.get('SELECT * FROM chats WHERE phone=? AND channel=? AND provider=?',phone,channel,provider);const now=this.now();if(!chat){const id=randomUUID();this.store.run('INSERT INTO chats(id,phone,name,channel,provider,updated,last_inbound) VALUES(?,?,?,?,?,?,?)',id,phone,name||phone.replace(/@.*$/,''),channel,provider,now,now);chat=this.store.chat(id);}
-  this.store.run('UPDATE chats SET unread=unread+1,last_inbound=? WHERE id=?',now,chat.id);const inbound=imported||this.store.addMessage({chatId:chat.id,providerId,direction:'in',body:body.trim()});
-  if(imported){this.store.run("UPDATE messages SET body=?,status='received',created=? WHERE id=?",body.trim(),now,inbound.id);this.store.run('UPDATE chats SET updated=? WHERE id=?',now,chat.id);}
+  this.store.run('UPDATE chats SET unread=unread+?,last_inbound=? WHERE id=?',alreadyRead?0:1,now,chat.id);const inbound=imported||this.store.addMessage({chatId:chat.id,providerId,direction:'in',body:body.trim()});
+  if(imported){this.store.run("UPDATE messages SET body=?,status='received',created=? WHERE id=?",body.trim(),canRespond?imported.created:now,inbound.id);this.store.run('UPDATE chats SET updated=? WHERE id=?',now,chat.id);}
   this.store.run('UPDATE messages SET inbound_verified=1 WHERE id=?',inbound.id);if(imported)this.store.changed();
   this.store.cancelFollowups(chat.id,{keepDelivery:true});
+  if(unreadBatchIds)for(const id of unreadBatchIds)this.store.run("UPDATE messages SET inbound_verified=1 WHERE id=? AND chat_id=? AND direction='in' AND status='imported'",id,chat.id);
+  if(alreadyRead){this.store.changed();return{chatId:chat.id,read:true};}
+  if(deferAudio){this.store.run('UPDATE messages SET audio_agent_state=?,audio_routing_version=? WHERE id=?',chat.mode==='auto'&&this.store.settings().agentEnabled?'pending':'skipped',chat.routing_version,inbound.id);this.store.changed();return{chatId:chat.id,deferred:true};}
+  return this.respondToMessage(chat,inbound,contextBody||body,forceHuman,channel,now);
+ }
+ finishAudio(id){
+  const row=this.store.get('SELECT * FROM messages WHERE id=?',id);if(!row)return Promise.resolve({ignored:true});const chat=this.store.chat(row.chat_id);if(!chat)return Promise.resolve({ignored:true});
+  return this.enqueue(`${chat.provider||'qr'}:${chat.channel}:${chat.phone}`,async()=>{
+   const live=this.store.chat(chat.id),message=this.store.get('SELECT * FROM messages WHERE id=?',id),latest=this.store.get("SELECT id FROM messages WHERE chat_id=? AND direction='in' ORDER BY rowid DESC LIMIT 1",chat.id);
+   if(message?.audio_agent_state!=='pending')return{ignored:true};
+   const eligible=!message.deleted_at&&message.inbound_verified===1&&live.mode==='auto'&&live.routing_version===message.audio_routing_version&&this.store.settings().agentEnabled&&latest?.id===id&&!(live.closed_at>message.created);
+   this.store.run('UPDATE messages SET audio_agent_state=? WHERE id=?',eligible?'interpreted':'skipped',id);this.store.changed();if(!eligible)return{ignored:true};
+   if(!message.transcript?.trim()){this.store.run("UPDATE chats SET mode='manual',pause_until=NULL,needs_human=1,handoff_reason='human' WHERE id=?",chat.id);this.store.changed();return{chatId:chat.id,paused:true};}
+   const original=message.transcript.trim(),kind=classifyMessage(original).type;
+   const body=kind==='quote'&&!live.pickup_pending_details&&!deliveryMethod(original)?audioQuotationText(original):original;
+   const result=await this.respondToMessage(live,message,body,!message.transcript,live.channel,this.now());if(!result.closed&&!result.paused&&result.intent!=='out_of_scope')this.followups.schedule(chat.id);return result;
+  });
+ }
+ async respondToMessage(chat,inbound,body,forceHuman,channel,now){
   const quotedOptions=JSON.parse(chat.quoted_options||'[]');
   const analysis=classifyMessage(body,{options:quotedOptions,pendingMeasure:chat.pending_measure,pendingSelection:chat.pending_selection});
   const type=forceHuman?'human':analysis.type;
+  if(type==='quote'&&analysis.selectionIndex===null&&!isBeltQuotation(body,chat)&&!deliveryMethod(body,{menu:chat.delivery_menu===1})&&!(chat.help_state==='asked'&&helpChoice(body)!==null)&&!chat.pickup_pending_details){this.store.changed();return{chatId:chat.id,intent:'out_of_scope'};}
   const help=chat.help_state==='asked'?helpChoice(body):null;
   if(chat.closed_at&&(type==='thanks'||helpChoice(body)!==null||/^[123][.!? ]*$/.test(body)))return{chatId:chat.id,closed:true,intent:type};
   if(!chat.service_origin_id||chat.closed_at)this.store.run('UPDATE chats SET service_origin_id=? WHERE id=?',inbound.id,chat.id);

@@ -1,4 +1,6 @@
-# Atualizar para a versão 1.18.0 no Docker
+# Atualizar para a versão 1.18.1 no Docker
+
+A versão 1.18.1 organiza o acompanhamento em **painéis separados por usuário**, com contatos e tempo de espera individual atualizado a cada segundo. Veja [painéis por usuário](docs/JANELAS_POR_USUARIO_1_18_1.md). Também inclui interpretação de áudio, cotações não lidas na sincronização, reativação de chats encerrados e correções de histórico e anexos. Inclui as atualizações anteriores.
 
 A versão 1.18.0 adiciona a aba **Acompanhamento**, exclusiva de Admin, com responsáveis em tempo real e tempo médio de resposta por usuário, além de **rascunhos privados por conversa**. Veja [acompanhamento e rascunhos](docs/ACOMPANHAMENTO_E_RASCUNHOS_1_18.md). Inclui todas as atualizações anteriores.
 
@@ -14,7 +16,7 @@ Use a instalação que já está funcionando. O ZIP contém o código; estoque, 
 docker compose stop -t 30 cota
 ```
 
-4. Copie o conteúdo da pasta extraída (`agent-<código>` no download do GitHub ou `cota-whatsapp-1.18.0` no pacote local) para a pasta da instalação atual, substituindo os arquivos do código. O `compose.yaml`, o `Dockerfile`, `server` e `src` devem ficar diretamente na pasta atual, sem criar outra pasta dentro dela. Preserve seu `.env`, dados locais e eventuais ajustes próprios de porta, domínio ou volumes no `compose.yaml`.
+4. Copie o conteúdo da pasta extraída (`agent-<código>` no download do GitHub ou `cota-whatsapp-1.18.1` no pacote local) para a pasta da instalação atual, substituindo os arquivos do código. O `compose.yaml`, o `Dockerfile`, `server` e `src` devem ficar diretamente na pasta atual, sem criar outra pasta dentro dela. Preserve seu `.env`, dados locais e eventuais ajustes próprios de porta, domínio ou volumes no `compose.yaml`.
 5. Na mesma pasta e usando o mesmo projeto Compose da instalação anterior, execute:
 
 ```powershell
@@ -36,7 +38,7 @@ docker compose logs --tail=100 cota
 docker compose exec cota node -p "require('./package.json').version"
 ```
 
-Deve mostrar `1.18.0`.
+Deve mostrar `1.18.1`.
 
 8. Perfis gerenciados pela versão 1.17.0 recuperam bloqueios antigos automaticamente. Para um bloqueio **profile_busy** herdado de versões anteriores, use **Recuperar conexão** uma vez, preservando a autenticação. Esse procedimento não precisa de **Recriar conexão**. Para o erro **profile_busy**, abra **WhatsApp → Recuperar conexão** após confirmar que todas as outras instâncias que usam a mesma sessão estão paradas. Marque a confirmação e clique em **Recuperar e gerar QR**. A atualização do código sozinha não remove links de bloqueio antigos; esse passo os recupera preservando os dados. Se o erro for **browser_close_timeout**, reinicie o serviço antes de tentar novamente:
 
@@ -44,7 +46,7 @@ Deve mostrar `1.18.0`.
 docker compose restart -t 30 cota
 ```
 
-9. Quando o WhatsApp ficar **Conectado**, a sincronização é automática. Use **Sincronizar WhatsApp** para consultar novamente as listas e **Carregar histórico** no chat para consultar as mensagens disponíveis dos últimos 30 dias. O histórico pode aguardar transferência pelo aparelho; essa consulta não aciona o bot nem cria mensagens não lidas.
+9. Quando o WhatsApp ficar **Conectado**, a sincronização é automática. Use **Sincronizar WhatsApp** para consultar novamente as listas e **Carregar histórico** no chat para consultar as mensagens disponíveis dos últimos 30 dias. O histórico pode aguardar transferência pelo aparelho. A consulta individual ao histórico não aciona o bot. Na sincronização geral, o agente ativo verifica também cotações antigas ainda não lidas e pode respondê-las uma única vez; mensagens já lidas permanecem somente no histórico.
 
 10. Em **WhatsApp → Ver diagnóstico de mensagens**, consulte os estados e contadores. **Baixar diagnóstico** gera um relatório sem números, textos de conversas ou dados da sessão.
 
@@ -52,7 +54,7 @@ docker compose restart -t 30 cota
 
 Com o WhatsApp desconectado, suas conversas, contatos e histórico ficam ocultos, com os dados preservados no volume. Ao reconectar, voltam a aparecer conforme o cargo e o responsável. As simulações seguem disponíveis.
 
-Com o WhatsApp **Conectado**, as listas de conversas, grupos e contatos salvos disponíveis são sincronizadas automaticamente. Um Admin pode abrir **WhatsApp** ou **Contatos** e clicar em **Sincronizar WhatsApp**. Conversas livres já lidas aparecem em **Histórico**; **Não lidas** contém somente mensagens novas. Admin também vê **Todos os atendimentos**. Agora a importação percorre as mensagens disponíveis dos últimos 30 dias das conversas privadas, sem limite fixo de 50. Em **Contatos**, clicar no nome abre a consulta sem assumir o chat ou enviar mensagens. Não é necessário apagar a sessão para preencher as listas. Veja [SINCRONIZACAO_WHATSAPP.md](docs/SINCRONIZACAO_WHATSAPP.md). Se a carga ficar incompleta, envie o detalhe de `docker compose logs --tail=100 cota`, nas linhas `[WhatsApp sync]`.
+Com o WhatsApp **Conectado**, as listas de conversas, grupos e contatos salvos disponíveis são sincronizadas automaticamente. Um Admin pode abrir **WhatsApp** ou **Contatos** e clicar em **Sincronizar WhatsApp**. Conversas livres já lidas aparecem em **Histórico**; **Não lidas** contém entradas recebidas pendentes de leitura. Admin também vê **Todos os atendimentos**. Agora a importação percorre as mensagens disponíveis dos últimos 30 dias das conversas privadas, sem limite fixo de 50. Em **Contatos**, clicar no nome abre a consulta sem assumir o chat ou enviar mensagens. Não é necessário apagar a sessão para preencher as listas. Veja [SINCRONIZACAO_WHATSAPP.md](docs/SINCRONIZACAO_WHATSAPP.md). Se a carga ficar incompleta, envie o detalhe de `docker compose logs --tail=100 cota`, nas linhas `[WhatsApp sync]`.
 
 Na primeira atualização para 1.13.0, os contadores antigos de WhatsApp são zerados uma única vez, pois incluíam marcações artificiais de importação ou liberação. O histórico, os responsáveis, os pedidos e os alertas continuam disponíveis. Mensagens novas recebidas após a atualização voltam a aparecer em Não lidas e mantêm o contador nos reinícios seguintes. Veja [HISTORICO_MENSAL_E_NAO_LIDAS.md](docs/HISTORICO_MENSAL_E_NAO_LIDAS.md).
 

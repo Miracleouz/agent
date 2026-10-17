@@ -56,6 +56,12 @@ export async function sendConfirmed(wa,chat,content,options={}){
  const recovered=receipt?.state==='accepted'&&receipt.chatId===chat.phone&&/^\d+@(c\.us|lid|s\.whatsapp\.net)$/.test(receipt.remoteId||'')&&typeof receipt.id==='string'&&receipt.id.startsWith('true_'+receipt.remoteId+'_');
  const id=browser?(recovered?receipt.id:null):(result?.id?._serialized||result?.id?.$1);
  if(typeof id!=='string'||!id){
+  if(browser&&receipt?.state==='prepared'&&error){
+   const module=String(error.message||'').match(/\bWAWeb[A-Za-z0-9]+\b/)?.[0];
+   wa.lastSendFailure={stage:'before_queue',kind:typeof content==='string'?'text':'media',code:module||'provider_preparation_failed',at:Date.now()};
+   wa.logger.error(`[WhatsApp send] before_queue kind=${wa.lastSendFailure.kind} code=${wa.lastSendFailure.code}`);
+   throw Object.assign(new Error(typeof content==='string'?'O WhatsApp recusou a preparação da mensagem. Nenhuma mensagem foi enviada.':'O WhatsApp não conseguiu preparar ou carregar o arquivo para envio. Nenhuma mídia foi enviada. Confira o arquivo e tente novamente.'),{definite:true,cause:error});
+  }
   wa.logger.error('[WhatsApp send] unconfirmed');
   throw Object.assign(new Error('Envio não confirmado. Confira no WhatsApp antes de reenviar; a mensagem pode já ter sido enviada.'),{uncertain:true,cause:error});
  }

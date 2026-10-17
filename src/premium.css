@@ -150,3 +150,4 @@ body{background:#f4f6fa}
  .stat-card>strong{font-size:24px}.stat-card{padding:12px 14px}.read-sync-status>span{flex:1;min-width:180px}
 }
 .draft-preview{color:#a76724;font-weight:650}.draft-status{flex-shrink:0;font-size:11px;color:#718096;background:#f8fafc;padding:6px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}.draft-status .text-button{font-size:11px}
+.sync-details{font-size:11px;margin-top:9px;color:var(--muted)}.sync-details summary{cursor:pointer}.sync-details ul{margin:8px 0;padding-left:18px}
