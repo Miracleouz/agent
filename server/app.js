@@ -14,6 +14,8 @@ import {conversationToolsRoutes,quotedTarget} from './conversation-tools.js';
 import {messageToolsRoutes} from './message-tools.js';
 import {orderRoutes} from './orders.js';
 import {sendAvatar} from './avatar-response.js';
+import {monitoring} from './monitoring.js';
+import {draftRoutes} from './drafts.js';
 const fail=(message,status=400)=>Object.assign(new Error(message),{status});
 export function createApp({store,whatsapp,production=false,appUrl=process.env.APP_URL}){
  const app=express();app.disable('x-powered-by');
@@ -39,7 +41,12 @@ export function createApp({store,whatsapp,production=false,appUrl=process.env.AP
   const settings=store.settings(),connection=whatsapp.snapshot(),admin=req.user.role==='admin';
   const connected=connection.status==='ready',chats=store.chats().filter(chat=>(connected||chat.channel==='simulator')&&(admin||!chat.assigned_user_id||chat.assigned_user_id===req.user.id)),visibleIds=new Set(chats.map(chat=>chat.id));
   const stats=store.stats({userId:admin?null:req.user.id});if(!connected)Object.assign(stats,{conversations:0,replies:0,waiting:chats.filter(chat=>chat.needs_human).length});
-  res.json({currentUser:req.user,settings:admin?settings:{businessName:settings.businessName,agentEnabled:settings.agentEnabled,pauseMinutes:settings.pauseMinutes},stats,chats,groups:connected?store.groupList():[],typing:presence().filter(item=>visibleIds.has(item.chatId)),team:admin?store.all('SELECT id,name,role FROM users WHERE active=1 ORDER BY name'):[],connection:admin?connection:{status:connection.status,number:connection.number},imports:admin?store.all('SELECT * FROM imports ORDER BY created DESC LIMIT 8'):[],events:admin?store.all('SELECT * FROM events ORDER BY created DESC LIMIT 12'):[]});
+  res.json({drafts:store.all("SELECT chat_id,body,revision,updated FROM chat_drafts WHERE user_id=? AND body<>''",req.user.id).filter(draft=>visibleIds.has(draft.chat_id)),currentUser:req.user,settings:admin?settings:{businessName:settings.businessName,agentEnabled:settings.agentEnabled,pauseMinutes:settings.pauseMinutes},stats,chats,groups:connected?store.groupList():[],typing:presence().filter(item=>visibleIds.has(item.chatId)),team:admin?store.all('SELECT id,name,role FROM users WHERE active=1 ORDER BY name'):[],connection:admin?connection:{status:connection.status,number:connection.number},imports:admin?store.all('SELECT * FROM imports ORDER BY created DESC LIMIT 8'):[],events:admin?store.all('SELECT * FROM events ORDER BY created DESC LIMIT 12'):[]});
+ });
+ app.get('/api/monitoring',adminOnly,(req,res)=>{
+  const {days}=z.object({days:z.enum(['1','7','30']).default('30')}).strict().parse(req.query);
+  const connected=whatsapp.snapshot().status==='ready',report=monitoring(store,{connected,days:Number(days)});
+  res.json({...report,typing:connected?presence().map(item=>({...item,expiresAt:typing.get(item.chatId+':'+item.userId)?.expires})):[]});
  });
  app.get('/api/events',(req,res)=>{
   res.set({'Content-Type':'text/event-stream','Connection':'keep-alive','X-Accel-Buffering':'no','Cache-Control':'no-store, no-transform'});res.flushHeaders();res.write('retry: 1000\nevent: ready\ndata: {}\n\n');
@@ -98,6 +105,7 @@ export function createApp({store,whatsapp,production=false,appUrl=process.env.AP
   const key=chat.id+':'+req.user.id;if(input.typing){if(chat.mode!=='manual')throw fail('Assuma o atendimento antes de digitar.',409);typing.set(key,{chatId:chat.id,userId:req.user.id,name:req.user.name,expires:Date.now()+8000});}else typing.delete(key);
   store.changed();res.json({ok:true});
  });
+ draftRoutes({app,store,visibleChat,queued,canControl});
  orderRoutes({app,store,queued,visibleChat,canControl});
  app.post('/api/chats/:id/order/confirm',(req,_res)=>{const chat=getChat(req.params.id);canControl(req,chat);throw fail('Atualize o painel e use Confirmar compra para revisar itens e baixar o estoque.',409);});
  const agent=new Agent(store,(chat,body,actions,options)=>whatsapp.send(chat,body,actions,options),{canSend:chat=>chat.channel==='simulator'||whatsapp.snapshot().status==='ready'});whatsapp.receiver=input=>agent.receive(input);
@@ -106,14 +114,16 @@ export function createApp({store,whatsapp,production=false,appUrl=process.env.AP
  conversationToolsRoutes({app,store,agent,whatsapp,visibleChat,queued,canControl});
  messageToolsRoutes({app,store,accounts,agent,whatsapp,getChat,visibleChat,queued,canControl});
  app.post('/api/chats/:id/send',async(req,res)=>{
-  const original=getChat(req.params.id),{body,version,replyTo}=z.object({replyTo:z.string().min(1).optional(),body:z.string().trim().min(1).max(4000),version:z.number().int().min(0).optional()}).strict().parse(req.body);
+  const original=getChat(req.params.id),{body,version,replyTo,draftRevision}=z.object({draftRevision:z.number().int().min(0).optional(),replyTo:z.string().min(1).optional(),body:z.string().trim().min(1).max(4000),version:z.number().int().min(0).optional()}).strict().parse(req.body);
   const result=await agent.enqueue(`${original.provider}:${original.channel}:${original.phone}`,async()=>{
    const user=accounts.getUser(req);if(!user)throw fail('Entre novamente no painel.',401);
    const chat=getChat(original.id);if(chat.mode!=='manual')throw fail('Ative "Responder manual" antes de enviar.',409);canControl(req,chat);
    if(chat.routing_version!==original.routing_version||version!==undefined&&version!==chat.routing_version)throw fail('O atendimento mudou. Confira a conversa antes de enviar.',409);
    if(!chat.assigned_user_id)store.openChat(chat.id,user);
    typing.delete(chat.id+':'+user.id);const transportBody=store.settings().signHumanMessages?`*${user.name}*: ${body}`:body;
-   return agent.reply(chat,body,[],'owner',{author:user,transportBody,quoted:quotedTarget(store,chat,replyTo)});
+   const reply=await agent.reply(chat,body,[],'owner',{author:user,transportBody,quoted:quotedTarget(store,chat,replyTo)});
+   if(reply.status==='sent'&&draftRevision!==undefined){const draft=store.get('SELECT body,revision FROM chat_drafts WHERE user_id=? AND chat_id=?',user.id,chat.id);if(draft?.revision===draftRevision&&draft.body.trim()===body){store.run("UPDATE chat_drafts SET body='',revision=revision+1,updated=? WHERE user_id=? AND chat_id=? AND revision=?",Date.now(),user.id,chat.id,draftRevision);store.changed();}}
+   return draftRevision===undefined?reply:{...reply,draft:store.get('SELECT body,revision,updated FROM chat_drafts WHERE user_id=? AND chat_id=?',user.id,chat.id)};
   });
   res.status(result.status==='failed'?502:result.status==='uncertain'?202:201).json(result.status==='failed'?{error:result.error,message:result}:result);
  });

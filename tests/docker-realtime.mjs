@@ -9,7 +9,7 @@ const exec=promisify(execFile),name='cota-live-test-'+randomUUID().slice(0,8);
 const docker=async(...args)=>(await exec('docker',args,{maxBuffer:4*1024*1024,timeout:180000})).stdout;
 let created=false;
 try{
- await docker('create','--init','--network','none','--name',name,'--label','cota.disposable-live-test=true','--shm-size=512m','--entrypoint','node',image,'--test','tests/realtime.test.js','tests/whatsapp-conversation-media.test.js','tests/production-features.mjs');created=true;
+ await docker('create','--init','--network','none','--name',name,'--label','cota.disposable-live-test=true','--shm-size=512m','--entrypoint','node',image,'--test','tests/realtime.test.js','tests/whatsapp-conversation-media.test.js','tests/production-features.mjs','tests/production-monitoring.mjs');created=true;
  // The server code and production dependencies remain those of the image.
  await docker('cp','tests',name+':/app/tests');await docker('cp','src',name+':/app/src');
  const output=await docker('start','--attach',name),code=Number((await docker('inspect','--format','{{.State.ExitCode}}',name)).trim());

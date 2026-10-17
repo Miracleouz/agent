@@ -1,6 +1,6 @@
 {
   "name": "cota-whatsapp",
-  "version": "1.17.2",
+  "version": "1.18.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -27,7 +27,8 @@
     "whatsapp:recover-profile": "node --env-file-if-exists=.env server/recover-whatsapp-profile.js",
     "whatsapp:diagnose": "node --env-file-if-exists=.env server/diagnose-whatsapp.js",
     "test:sync": "node --test tests/whatsapp-sync.test.js tests/month-history.test.js tests/groups.test.js tests/whatsapp-roster.test.js tests/whatsapp-media-sync.test.js",
-    "test:read": "node --test tests/whatsapp-read.test.js tests/industrial-vocabulary.test.js"
+    "test:read": "node --test tests/whatsapp-read.test.js tests/industrial-vocabulary.test.js",
+    "test:monitoring": "node --test tests/monitoring.test.js tests/drafts.test.js"
   },
   "dependencies": {
     "@fontsource-variable/dm-sans": "^5.3.0",

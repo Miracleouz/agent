@@ -1,4 +1,6 @@
-# Atualizar para a versão 1.17.2 no Docker
+# Atualizar para a versão 1.18.0 no Docker
+
+A versão 1.18.0 adiciona a aba **Acompanhamento**, exclusiva de Admin, com responsáveis em tempo real e tempo médio de resposta por usuário, além de **rascunhos privados por conversa**. Veja [acompanhamento e rascunhos](docs/ACOMPANHAMENTO_E_RASCUNHOS_1_18.md). Inclui todas as atualizações anteriores.
 
 A versão 1.17.2 adiciona [colagem de prints com Ctrl+V e orientação para transferência sem liberação](docs/CTRL_V_E_TRANSFERENCIA_1_17_2.md). Mantém os recursos da versão 1.17.1, que inclui [edição e exclusão para todos por cargo](docs/EDITAR_E_APAGAR_1_17_1.md). Mantém os recursos da 1.17.0, que adiciona confirmação de compra com baixa de estoque por item e medida, reativação do bot ao liberar o chat, atendimento em tela ampliada, mídia, reações, citação e transcrição local. Veja o [guia dos recursos e limites](docs/ATENDIMENTO_E_ESTOQUE_1_17.md). Mantém as correções de sincronização e identificadores do WhatsApp da 1.16.2.
 
@@ -12,7 +14,7 @@ Use a instalação que já está funcionando. O ZIP contém o código; estoque, 
 docker compose stop -t 30 cota
 ```
 
-4. Copie o conteúdo da pasta extraída (`agent-<código>` no download do GitHub ou `cota-whatsapp-1.17.2` no pacote local) para a pasta da instalação atual, substituindo os arquivos do código. O `compose.yaml`, o `Dockerfile`, `server` e `src` devem ficar diretamente na pasta atual, sem criar outra pasta dentro dela. Preserve seu `.env`, dados locais e eventuais ajustes próprios de porta, domínio ou volumes no `compose.yaml`.
+4. Copie o conteúdo da pasta extraída (`agent-<código>` no download do GitHub ou `cota-whatsapp-1.18.0` no pacote local) para a pasta da instalação atual, substituindo os arquivos do código. O `compose.yaml`, o `Dockerfile`, `server` e `src` devem ficar diretamente na pasta atual, sem criar outra pasta dentro dela. Preserve seu `.env`, dados locais e eventuais ajustes próprios de porta, domínio ou volumes no `compose.yaml`.
 5. Na mesma pasta e usando o mesmo projeto Compose da instalação anterior, execute:
 
 ```powershell
@@ -34,7 +36,7 @@ docker compose logs --tail=100 cota
 docker compose exec cota node -p "require('./package.json').version"
 ```
 
-Deve mostrar `1.17.2`.
+Deve mostrar `1.18.0`.
 
 8. Perfis gerenciados pela versão 1.17.0 recuperam bloqueios antigos automaticamente. Para um bloqueio **profile_busy** herdado de versões anteriores, use **Recuperar conexão** uma vez, preservando a autenticação. Esse procedimento não precisa de **Recriar conexão**. Para o erro **profile_busy**, abra **WhatsApp → Recuperar conexão** após confirmar que todas as outras instâncias que usam a mesma sessão estão paradas. Marque a confirmação e clique em **Recuperar e gerar QR**. A atualização do código sozinha não remove links de bloqueio antigos; esse passo os recupera preservando os dados. Se o erro for **browser_close_timeout**, reinicie o serviço antes de tentar novamente:
 
@@ -64,7 +66,7 @@ Nesta versão, o atendimento automático envia um único aviso e encerra após c
 
 Não execute `docker compose down -v` nem exclua o volume `cota-data`. O nome real do volume costuma incluir o nome do projeto Compose. Mantenha a mesma instalação/projeto para preservar estoque, acessos, histórico e sessão. Caso a sessão de WhatsApp tenha expirado, gere um novo QR no painel.
 
-Os resultados dos testes desta versão estão em [TEMPO_REAL_E_HISTORICO_30_DIAS.md](docs/TEMPO_REAL_E_HISTORICO_30_DIAS.md). Construa a imagem na sua instalação pelo comando acima.
+Os resultados dos testes desta versão estão em [ACOMPANHAMENTO_E_RASCUNHOS_1_18.md](docs/ACOMPANHAMENTO_E_RASCUNHOS_1_18.md). Construa a imagem na sua instalação pelo comando acima.
 
 Se a recuperação pelo painel não concluir, há um [procedimento de recuperação offline pelo Docker](docs/RECUPERACAO_FORA_DO_PAINEL.md) para a instalação padrão. Ele usa a imagem e o volume exatos do contêiner existente e verifica se outros contêineres ainda usam esse volume, sem exigir outra atualização do aplicativo.
 
