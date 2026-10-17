@@ -67,6 +67,8 @@ No painel, abra **WhatsApp → Gerar QR Code**. No celular, abra **Aparelhos con
 
 Se o QR não aparecer, consulte [Diagnóstico do QR](docs/DIAGNOSTICO_QR.md). O painel diferencia falhas de navegador, perfil ocupado, rede, certificados e permissões; `npm run whatsapp:diagnose` testa um perfil temporário sem parear números ou usar a sessão existente. No Docker, use `docker compose exec cota npm run whatsapp:diagnose`.
 
+A versão **1.16.1** recupera os observadores após recargas internas e carrega o histórico disponível antes de aguardar páginas antigas. Inclui diagnóstico de mensagens sem conteúdo privado. Veja [a validação desta atualização](docs/CORRECAO_EVENTOS_E_HISTORICO_1_16_1.md).
+
 A versão **1.16.0** acompanha entradas e saídas do WhatsApp em tempo real, mantém a atualização do painel durante importações e consulta os últimos 30 dias em Conversas, Contatos e grupos. Veja [TEMPO_REAL_E_HISTORICO_30_DIAS.md](docs/TEMPO_REAL_E_HISTORICO_30_DIAS.md).
 
 A versão **1.15.7** evita o cache HTTP/service worker antigo no perfil salvo e oferece **Recriar conexão**, guardando o perfil anterior e preparando outro QR sem substituir estoque, usuários ou histórico do painel. Veja [PERFIL_SALVO_E_NOVO_QR.md](docs/PERFIL_SALVO_E_NOVO_QR.md).
@@ -178,3 +180,5 @@ Para abertas, `openBeltPriceBasis=per_meter_mm` significa preço por um metro lo
 O estoque em metros limita o comprimento contínuo, e a largura informada limita as faixas cortáveis. Para várias correias, o agente confere quantas faixas e segmentos inteiros cabem no lote; uma área equivalente suficiente não autoriza juntar retalhos para criar um corte contínuo maior. Registros de abertas com unidade de estoque incompatível com metros ou sem largura cadastrada são encaminhados ao atendente. Por exemplo, o saldo de uma aberta marcada como `Milímetro (MM)` não é interpretado automaticamente como metros: o registro exige revisão humana.
 
 A base padrão das abertas é preço por metro da faixa inteira. Alterar a configuração não reativa automaticamente conversas assumidas ou encaminhadas ao atendente.
+
+Na versão **1.16.1**, passaram **3.698 testes de servidor**, **52 testes de navegador** e o build. **325 testes de tempo real** passaram novamente na imagem Docker, além de **23 verificações** de conexão, desconexão e recuperação. Os eventos de WhatsApp são simulados; Chromium, SDK, servidor e painel são reais. Veja [o relatório da versão](docs/CORRECAO_EVENTOS_E_HISTORICO_1_16_1.md).

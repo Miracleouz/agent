@@ -1,6 +1,6 @@
-# Atualizar para a versão 1.16.0 no Docker
+# Atualizar para a versão 1.16.1 no Docker
 
-A versão 1.16.0 corrige a recepção e o envio em tempo real, acompanha mensagens enviadas pelo celular/Web, evita falhas `r/findImpl` em conversas carregadas e limita a consulta ao histórico dos últimos 30 dias. A atualização reutiliza o banco e a sessão conectada. Veja [TEMPO_REAL_E_HISTORICO_30_DIAS.md](docs/TEMPO_REAL_E_HISTORICO_30_DIAS.md).
+A versão 1.16.1 recupera os observadores após mudanças internas do WhatsApp e mostra as mensagens disponíveis antes de aguardar páginas antigas. Inclui diagnóstico de eventos e testes do histórico no painel e do agente ligado/desligado. A atualização reutiliza o banco e a sessão conectada. Veja [o relatório da versão](docs/CORRECAO_EVENTOS_E_HISTORICO_1_16_1.md).
 
 Use a instalação que já está funcionando. O ZIP contém o código; estoque, usuários, conversas e sessão do WhatsApp permanecem no volume existente.
 
@@ -12,7 +12,7 @@ Use a instalação que já está funcionando. O ZIP contém o código; estoque, 
 docker compose stop -t 30 cota
 ```
 
-4. Copie o conteúdo da pasta extraída (`agent-<código>` no download do GitHub ou `cota-whatsapp-1.16.0` no pacote local) para a pasta da instalação atual, substituindo os arquivos do código. O `compose.yaml`, o `Dockerfile`, `server` e `src` devem ficar diretamente na pasta atual, sem criar outra pasta dentro dela. Preserve seu `.env`, dados locais e eventuais ajustes próprios de porta, domínio ou volumes no `compose.yaml`.
+4. Copie o conteúdo da pasta extraída (`agent-<código>` no download do GitHub ou `cota-whatsapp-1.16.1` no pacote local) para a pasta da instalação atual, substituindo os arquivos do código. O `compose.yaml`, o `Dockerfile`, `server` e `src` devem ficar diretamente na pasta atual, sem criar outra pasta dentro dela. Preserve seu `.env`, dados locais e eventuais ajustes próprios de porta, domínio ou volumes no `compose.yaml`.
 5. Na mesma pasta e usando o mesmo projeto Compose da instalação anterior, execute:
 
 ```powershell
@@ -34,7 +34,7 @@ docker compose logs --tail=100 cota
 docker compose exec cota node -p "require('./package.json').version"
 ```
 
-Deve mostrar `1.16.0`.
+Deve mostrar `1.16.1`.
 
 8. Para o erro **profile_busy**, abra **WhatsApp → Recuperar conexão** após confirmar que todas as outras instâncias que usam a mesma sessão estão paradas. Marque a confirmação e clique em **Recuperar e gerar QR**. A atualização do código sozinha não remove links de bloqueio antigos; esse passo os recupera preservando os dados. Se o erro for **browser_close_timeout**, reinicie o serviço antes de tentar novamente:
 
@@ -44,7 +44,9 @@ docker compose restart -t 30 cota
 
 9. Quando o WhatsApp ficar **Conectado**, a sincronização é automática. Use **Sincronizar WhatsApp** para consultar novamente as listas e **Carregar histórico** no chat para consultar as mensagens disponíveis dos últimos 30 dias. O histórico pode aguardar transferência pelo aparelho; essa consulta não aciona o bot nem cria mensagens não lidas.
 
-10. Abra o endereço que você já usa para acessar o painel e pressione **Ctrl+F5**. Na instalação local padrão, o endereço digitado no navegador é `localhost:3000`. Assuma um chat de teste com outro número e envie uma mensagem manual. Confira a mensagem no WhatsApp e o check no Cota. Se houver perda de confirmação sem prova suficiente, o painel mostrará **Envio não confirmado**, com orientação para conferir no WhatsApp antes de reenviar. Não há reenvio automático. As marcações antigas já gravadas não são alteradas sem confirmação.
+10. Em **WhatsApp → Ver diagnóstico de mensagens**, consulte os estados e contadores. **Baixar diagnóstico** gera um relatório sem números, textos de conversas ou dados da sessão.
+
+11. Abra o endereço que você já usa para acessar o painel e pressione **Ctrl+F5**. Na instalação local padrão, o endereço digitado no navegador é `localhost:3000`. Assuma um chat de teste com outro número e envie uma mensagem manual. Confira a mensagem no WhatsApp e o check no Cota. Se houver perda de confirmação sem prova suficiente, o painel mostrará **Envio não confirmado**, com orientação para conferir no WhatsApp antes de reenviar. Não há reenvio automático. As marcações antigas já gravadas não são alteradas sem confirmação.
 
 Com o WhatsApp desconectado, suas conversas, contatos e histórico ficam ocultos, com os dados preservados no volume. Ao reconectar, voltam a aparecer conforme o cargo e o responsável. As simulações seguem disponíveis.
 

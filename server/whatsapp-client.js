@@ -26,7 +26,7 @@ function within(operation,signal,timeout){
 // its page-navigation listener and injection; never catch process-wide errors.
 export class WhatsAppClient extends wa.Client{
  constructor(options){
-  super(options);this.stopping=false;this.controller=new AbortController();this.navigationTasks=new Set();this.guardedPages=new WeakSet();
+  super(options);this.cotaManaged=true;this.stopping=false;this.controller=new AbortController();this.navigationTasks=new Set();this.guardedPages=new WeakSet();
   this.launchSettled=new Promise(resolve=>{this.finishLaunch=resolve;});
   let page=this.pupPage;
   Object.defineProperty(this,'pupPage',{configurable:true,get:()=>page,set:value=>{page=value;if(value)this.guardNavigation(value);}});

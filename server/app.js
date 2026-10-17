@@ -136,6 +136,7 @@ export function createApp({store,whatsapp,production=false,appUrl=process.env.AP
  let syncing=false;
  async function syncStock(url){if(syncing)throw fail('Já existe uma sincronização em andamento.',409);syncing=true;try{const items=await fetchSheet(url);const count=replaceCatalog(store,items,'Google Sheets');store.setSettings({sheetUrl:url,lastSync:Date.now()});return count;}finally{syncing=false;}}
  app.post('/api/stock/sync',adminOnly,async(req,res)=>{const{url}=z.object({url:z.string().max(500)}).parse(req.body);res.json({count:await syncStock(url)});});
+ app.post('/api/whatsapp/diagnostics',adminOnly,async(req,res)=>{z.object({}).strict().parse(req.body||{});res.json(await whatsapp.diagnostics());});
  app.post('/api/whatsapp/connect',adminOnly,async(_req,res)=>res.json(await whatsapp.connect()));
  app.post('/api/whatsapp/sync',adminOnly,(req,res)=>{z.object({}).strict().parse(req.body||{});if(whatsapp.snapshot().status!=='ready')throw fail('Aguarde o WhatsApp ficar Conectado antes de sincronizar.',409);whatsapp.sync().catch(()=>{});res.status(202).json({ok:true});});
  app.post('/api/whatsapp/disconnect',adminOnly,async(_req,res)=>{await whatsapp.disconnect();res.json(whatsapp.snapshot());});

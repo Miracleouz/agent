@@ -1,7 +1,7 @@
 import wa from 'whatsapp-web.js';
 
 // Read the linked browser's message collection without the SDK's full serializer.
-export async function cachedHistory({chatId,limit,cutoff}){
+export async function cachedHistory({chatId,limit,cutoff,loadEarlier=true,pageTimeout=5000}){
  const collections=window.require('WAWebCollections')||window.Store,Chat=collections?.Chat;
  let chat;try{chat=window.__cotaFindChatV1?.(chatId)||Chat?.get?.(chatId);}catch{}
  if(!chat){const rows=Chat?.getModelsArray?.()||Chat?.models||[];chat=rows.find(row=>(typeof row.id==='string'?row.id:row.id?._serialized)===chatId);}
@@ -9,9 +9,12 @@ export async function cachedHistory({chatId,limit,cutoff}){
  const same=row=>{const value=row.id?.remote;return(typeof value==='string'?value:value?._serialized)===chatId||[row.from,row.to].some(value=>(typeof value==='string'?value:value?._serialized)===chatId);};
  const read=()=>{const local=chat.msgs?.getModelsArray?.()||chat.msgs?.models||[],global=collections?.Msg?.getModelsArray?.()||collections?.Msg?.models||[];return[...new Map([...global.filter(same),...local].map(row=>[row.id?._serialized,row])).values()];};
  let rows=read(),previous=new Set(rows.map(m=>m.id?._serialized));
- let incomplete=false;
- while(rows.length<limit&&!(Number.isFinite(cutoff)&&rows.some(row=>Number(row.t)*1000<=cutoff))){
-  let loaded;try{loaded=await window.require('WAWebChatLoadMessages').loadEarlierMsgs({chat});}catch{incomplete=true;break;}
+ let incomplete=false,pages=0;const deadline=Date.now()+8000;
+ window.__cotaHistoryLoadsV1??=new WeakMap();
+ while(loadEarlier&&rows.length<limit&&!(Number.isFinite(cutoff)&&rows.some(row=>Number(row.t)*1000<=cutoff))){
+  if(pages++>=8||Date.now()>=deadline){incomplete=true;break;}
+  let request=window.__cotaHistoryLoadsV1.get(chat);if(!request){request=Promise.resolve().then(()=>window.require('WAWebChatLoadMessages').loadEarlierMsgs({chat}));window.__cotaHistoryLoadsV1.set(chat,request);const clear=()=>{if(window.__cotaHistoryLoadsV1.get(chat)===request)window.__cotaHistoryLoadsV1.delete(chat);};request.then(clear,clear);}
+  let loaded,timer;try{loaded=await Promise.race([request,new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('COTA_HISTORY_PAGE_TIMEOUT')),pageTimeout);})]);}catch{incomplete=true;break;}finally{clearTimeout(timer);}
   const all=new Map([...rows,...(Array.isArray(loaded)?loaded:[]),...read()].map(m=>[m.id?._serialized,m]));
   rows=[...all.values()];const next=new Set(rows.map(m=>m.id?._serialized));
   if(next.size===previous.size&&[...next].every(id=>previous.has(id)))break;previous=next;
@@ -21,14 +24,14 @@ export async function cachedHistory({chatId,limit,cutoff}){
  for(const row of rows.slice(-limit)){try{
   const providerId=id(row.id);if(!providerId||row.isNotification)continue;
   const own=row.id?.fromMe===true,remote=id(row.id?.remote);
-  messages.push({id:{_serialized:providerId,fromMe:own},fromMe:own,type:row.type,body:String(row.body||row.caption||''),timestamp:row.t,from:id(row.from)||(!own?remote:undefined),to:id(row.to)||(own?remote:undefined),author:id(row.author),isStatus:row.isStatusV3===true});
+  messages.push({id:{_serialized:providerId,fromMe:own},fromMe:own,type:row.type,body:String(row.body||row.caption||''),timestamp:Number(row.t),from:id(row.from)||(!own?remote:undefined),to:id(row.to)||(own?remote:undefined),author:id(row.author),isStatus:row.isStatusV3===true});
  }catch{skipped++;}}
  return{messages,skipped,incomplete};
 }
 export const basicChat=(client,id)=>new wa.Chat(client,{id:{_serialized:id},formattedTitle:id,t:0,isGroup:false});
-export async function readCachedHistory(client,id,limit,cutoff){
+export async function readCachedHistory(client,id,limit,cutoff,options={}){
  if(typeof client.pupPage?.evaluate!=='function')throw new Error('COTA_HISTORY_BROWSER_UNAVAILABLE');
- const result=await client.pupPage.evaluate(cachedHistory,{chatId:id,limit,cutoff});
+ const result=await client.pupPage.evaluate(cachedHistory,{chatId:id,limit,cutoff,...options});
  if(!Array.isArray(result?.messages))throw new Error('COTA_HISTORY_INVALID_RESPONSE');return result;
 }
 export async function requestCachedHistory(chatId){

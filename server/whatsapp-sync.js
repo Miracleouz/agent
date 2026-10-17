@@ -86,13 +86,16 @@ export class WhatsAppSync{
  importMessage(chat,message){
   const providerId=idOf(message),created=stamp(message.timestamp);if(!providerId||!created||created<(this.cutoff||Date.now()-historyWindow)||message.isStatus)return;
   const incoming=!(message.fromMe||message.id?.fromMe),from=message.from,to=message.to;
-  // A live inbound must reach the verified receiver first; a history read cannot consume it.
-  if(!Number.isFinite(this.wa.readyAt)||message.timestamp>=this.wa.readyAt)return;
+  // Snapshots remain read-only even when a live observer missed an event. A later
+  // verified live event may promote this row once; a snapshot never runs the agent.
+  if(!Number.isFinite(this.wa.readyAt))return;
+  if(!incoming&&message.timestamp>=this.wa.readyAt&&this.store.get("SELECT id FROM messages WHERE chat_id=? AND direction IN ('owner','bot') AND status='pending'",chat.id))return;
   // Check the original conversation, not the message text, before storing a snapshot.
   const target=incoming?from:to,alias=target&&this.store.get('SELECT chat_id FROM whatsapp_chat_aliases WHERE alias=?',target);if(target!==chat.phone&&alias?.chat_id!==chat.id)return;
   const text=['chat','buttons_response','list_response','template_button_reply'].includes(message.type),media=['image','audio','ptt','video','document','sticker','location','vcard','multi_vcard'].includes(message.type);if(!text&&!media)return;
   const body=String(message.body|| (media?'[Anexo anterior à conexão — disponível no WhatsApp]':'')).trim().slice(0,10000);if(!body)return;
   this.store.run('INSERT OR IGNORE INTO messages(id,chat_id,provider_id,direction,body,status,created,author_name,inbound_verified) VALUES(?,?,?,?,?,?,?,?,0)',randomUUID(),chat.id,providerId,incoming?'in':'owner',body,'imported',created,incoming?null:'Enviado pelo WhatsApp');
+  this.store.run('UPDATE chats SET updated=MAX(updated,?) WHERE id=?',created,chat.id);
  }
  contact(person,{force=false}={}){
   const prior=this.contactRequests.get(person.phone);if(prior&&(prior.pending||!force&&Date.now()-prior.at<15000))return prior.task;
@@ -115,7 +118,7 @@ export class WhatsAppSync{
   const client=this.wa.client,generation=this.wa.generation,signal=this.controller.signal,entry={pending:true,at:Date.now()},cutoff=Date.now()-historyWindow;this.groupHistories.set(id,entry);
   entry.task=(async()=>{try{let limit=200;const seen=new Set();while(this.active(client,generation)&&!signal.aborted){
    const result=await bounded(()=>readCachedHistory(client,id,limit,cutoff),signal,this.historyTimeout);if(!this.active(client,generation)||signal.aborted)return;
-   let added=0,oldest=Infinity;this.store.transaction(()=>{for(const message of result.messages){const providerId=idOf(message),created=stamp(message.timestamp);if(created)oldest=Math.min(oldest,created);if(!providerId||seen.has(providerId))continue;seen.add(providerId);added++;const own=message.fromMe||message.id?.fromMe;if((own?message.to:message.from)!==id||!created||created<cutoff||message.timestamp>=this.wa.readyAt||message.isStatus)continue;
+   let added=0,oldest=Infinity;this.store.transaction(()=>{for(const message of result.messages){const providerId=idOf(message),created=stamp(message.timestamp);if(created)oldest=Math.min(oldest,created);if(!providerId||seen.has(providerId))continue;seen.add(providerId);added++;const own=message.fromMe||message.id?.fromMe;if((own?message.to:message.from)!==id||!created||created<cutoff||message.isStatus)continue;
     const text=['chat','buttons_response','list_response','template_button_reply'].includes(message.type),media=['image','audio','ptt','video','document','sticker'].includes(message.type);if(!text&&!media)continue;const body=String(message.body||(media?'[Anexo anterior à conexão — disponível no WhatsApp]':'')).trim().slice(0,10000);if(body)this.store.run('INSERT OR IGNORE INTO whatsapp_group_messages VALUES(?,?,?,?,?,?)',randomUUID(),id,providerId,own?'Enviado pelo WhatsApp':message.author||'Participante',body,created);
    }});this.store.changed();if(oldest<=cutoff||result.messages.length<limit||!added||result.incomplete)break;limit*=2;
   }}catch(error){if(this.active(client,generation)&&!signal.aborted)this.report(error,'group_history');}finally{entry.pending=false;}})();return entry.task;
@@ -130,6 +133,7 @@ export class WhatsAppSync{
    let remote=this.remotes.get(chat.id);if(!remote&&typeof client.getChatById==='function'){try{remote=await bounded(()=>client.getChatById(chat.phone),signal,this.timeout);}catch(error){if(signal.aborted)throw error;this.report(error);}}
    if(!remote&&typeof client.pupPage?.evaluate==='function')remote=basicChat(client,chat.phone);if(!this.active(client,generation)||signal.aborted)return false;if(typeof remote?.fetchMessages!=='function')throw new Error('O WhatsApp não disponibilizou a consulta do histórico deste chat.');this.remotes.set(chat.id,remote);
    let limit=200,oldest=null;const seen=new Set();
+   if(client.cotaLiveEvents){const available=await bounded(()=>readCachedHistory(client,idOf(remote)||chat.phone,limit,cutoff,{loadEarlier:false}),signal,this.timeout);if(!this.active(client,generation)||signal.aborted)return false;this.store.transaction(()=>{for(const message of available.messages)this.importMessage(chat,message);});this.store.changed();}
    while(this.active(client,generation)&&!signal.aborted){
     let messages,incomplete=false,raw;
     if(client.cotaLiveEvents)try{raw=await bounded(()=>readCachedHistory(client,idOf(remote)||chat.phone,limit,cutoff),signal,this.historyTimeout);}catch(error){if(signal.aborted)return false;this.report(error,'history_cache');}

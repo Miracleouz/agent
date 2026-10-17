@@ -1,10 +1,12 @@
 import wa from 'whatsapp-web.js';
+import manifest from '../package.json' with {type:'json'};
 import QRCode from 'qrcode';
 import {existsSync} from 'node:fs';
 import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {photoInfo,maxPhotoBytes} from './images.js';
 import {connectionError,safeConnectionDetail,authenticationTimeout} from './connection-errors.js';
+import {WhatsAppMonitor} from './whatsapp-monitor.js';
 import {WhatsAppSync} from './whatsapp-sync.js';
 import {WhatsAppReadSync} from './whatsapp-read.js';
 import {WhatsAppAvatars} from './whatsapp-avatars.js';
@@ -17,12 +19,12 @@ function bounded(operation,timeout,code){return new Promise((resolve,reject)=>{c
 const closures=new WeakMap();
 function closeClient(client,timeout){if(!closures.has(client))closures.set(client,bounded(()=>client.destroy(),timeout,'COTA_BROWSER_CLOSE_TIMEOUT'));return closures.get(client);}
 export class WhatsApp {
- constructor(store,dataDir,{clientFactory=options=>new WhatsAppClient(options),logger=console,startupTimeout=null,cleanupTimeout=6000}={}){this.store=store;this.dataDir=dataDir;this.clientFactory=clientFactory;this.logger=logger;this.startupTimeout=startupTimeout;this.cleanupTimeout=cleanupTimeout;this.client=null;this.status='disconnected';this.qr=null;this.error=null;this.number=null;this.receiver=null;this.generation=0;this.mediaTasks=new Set();this.syncer=new WhatsAppSync(this);this.readSync=new WhatsAppReadSync(this);this.avatars=new WhatsAppAvatars(this);}
- snapshot(){return {status:this.status,qr:this.qr,error:this.error,number:this.number,transport:'qr',nativeButtons:false,progress:{stage:this.stage||null,message:connectionStageLabel(this.stage),deadlineAt:this.deadlineAt||null},sync:this.syncer.snapshot()};}
+ constructor(store,dataDir,{clientFactory=options=>new WhatsAppClient(options),logger=console,startupTimeout=null,cleanupTimeout=6000}={}){this.store=store;this.dataDir=dataDir;this.clientFactory=clientFactory;this.logger=logger;this.startupTimeout=startupTimeout;this.cleanupTimeout=cleanupTimeout;this.client=null;this.status='disconnected';this.qr=null;this.error=null;this.number=null;this.receiver=null;this.generation=0;this.mediaTasks=new Set();this.monitor=new WhatsAppMonitor(this);this.syncer=new WhatsAppSync(this);this.readSync=new WhatsAppReadSync(this);this.avatars=new WhatsAppAvatars(this);}
+ snapshot(){return {status:this.status,qr:this.qr,error:this.error,number:this.number,transport:'qr',nativeButtons:false,progress:{stage:this.stage||null,message:connectionStageLabel(this.stage),deadlineAt:this.deadlineAt||null},sync:this.syncer.snapshot(),realtime:this.monitor.snapshot()};}
  clearStartup(){clearTimeout(this.startupTimer);this.startupTimer=null;this.deadlineAt=null;}
  progress(stage){if(!connectionStageLabel(stage)||stage===this.stage)return;this.stage=stage;this.logger.info?.(`[WhatsApp connect] stage=${stage}`);this.store.changed();}
  armStartup(client,generation){this.clearStartup();const timeout=this.startupTimeout??authenticationTimeout(process.env.WHATSAPP_AUTH_TIMEOUT_MS);this.deadlineAt=Date.now()+timeout;this.startupTimer=setTimeout(()=>{if(this.client!==client||this.generation!==generation||!['starting','authenticated'].includes(this.status))return;this.connectionFailed(new Error('COTA_CONNECTION_TIMEOUT'));closeClient(client,this.cleanupTimeout).catch(()=>{});},timeout);this.startupTimer.unref?.();}
- update(status,error=null){if(!['starting','authenticated'].includes(status))this.clearStartup();if(status!=='ready'&&this.readSync?.pending.size)this.readSync.reset();this.status=status;this.error=error;if(status!=='ready')this.store.cancelFollowups(null,{whatsappOnly:true});this.store.changed();}
+ update(status,error=null){if(status!=='ready')this.monitor.reset();if(!['starting','authenticated'].includes(status))this.clearStartup();if(status!=='ready'&&this.readSync?.pending.size)this.readSync.reset();this.status=status;this.error=error;if(status!=='ready')this.store.cancelFollowups(null,{whatsappOnly:true});this.store.changed();}
  connectionFailed(error){const diagnosis=connectionError(error);this.qr=null;this.number=null;this.update('error',`${diagnosis.message} Código: ${diagnosis.code}.`);this.store.event('whatsapp_error',this.error);this.logger.error(`[WhatsApp] ${diagnosis.code}: ${safeConnectionDetail(error)}`);}
  connect(){
   if(this.disconnecting)return this.disconnecting.then(()=>this.connect());
@@ -56,26 +58,28 @@ export class WhatsApp {
   client.on('cota_reloading',()=>{if(this.generation!==generation||this.client!==client||this.status==='error')return;readyAt=null;this.readyAt=null;this.syncer.reset();this.readSync.reset();this.avatars.reset();this.qr=null;this.number=null;this.update('starting');if(!this.startupTimer)this.armStartup(client,generation);});
   client.on('cota_connection_error',error=>{if(this.generation!==generation||this.client!==client||this.status==='error')return;this.syncer.reset();this.readSync.reset();this.avatars.reset();this.connectionFailed(error);Promise.resolve().then(()=>client.destroy()).catch(()=>{});});
   client.on('qr',async code=>{try{const qr=await QRCode.toDataURL(code,{width:300,margin:2});if(this.generation!==generation||this.status==='error')return;this.qr=qr;this.update('qr');this.progress('qr_wait');}catch(error){if(this.generation===generation&&this.status!=='error')this.connectionFailed(error);}});
-  client.on('authenticated',()=>{if(this.generation!==generation||this.status==='error')return;const initial=this.status!=='authenticated';this.qr=null;this.update('authenticated');this.progress('session_sync');if(initial)this.armStartup(client,generation);});
-  client.on('ready',()=>{if(this.generation!==generation||this.status==='error')return;readyAt=Math.floor(Date.now()/1000);this.readyAt=readyAt;this.qr=null;this.number=client.info?.wid?.user||null;this.update('ready');this.progress('ready');this.store.event('whatsapp','WhatsApp conectado.');this.syncer.run().catch(error=>{if(this.generation===generation)this.syncer.report(error);});});
+  client.on('authenticated',()=>{if(this.generation!==generation||this.status==='error'||this.status==='ready')return;const initial=this.status!=='authenticated';this.qr=null;this.update('authenticated');this.progress('session_sync');if(initial)this.armStartup(client,generation);});
+  client.on('ready',()=>{if(this.generation!==generation||this.status==='error')return;if(this.status==='ready'){this.monitor.check();return;}readyAt=Math.floor(Date.now()/1000);this.readyAt=readyAt;this.qr=null;this.number=client.info?.wid?.user||null;this.update('ready');this.progress('ready');this.monitor.check();this.store.event('whatsapp','WhatsApp conectado.');this.syncer.run().catch(error=>{if(this.generation===generation)this.syncer.report(error);});});
   client.on('auth_failure',()=>{if(this.generation===generation)this.update('error','A sessão expirou. Desconecte e leia um novo QR Code.');});
   client.on('disconnected',()=>{if(this.generation===generation&&this.status!=='error'){this.syncer.reset();this.readSync.reset();this.avatars.reset();this.qr=null;this.number=null;this.update('disconnected','A conexão foi encerrada. Conecte novamente no painel.');}});
   const received=message=>{
    if(this.generation!==generation||this.client!==client||this.status!=='ready'||readyAt===null)return;
+   this.monitor.received();
    const group=/^\d+(?:-\d+)?@g\.us$/.test(message.from);
-   if(message.fromMe||message.id?.fromMe||message.isStatus||!group&&!/^\d+@(c\.us|lid|s\.whatsapp\.net)$/.test(message.from))return;
+   if(message.fromMe||message.id?.fromMe||message.isStatus||!group&&!/^\d+@(c\.us|lid|s\.whatsapp\.net)$/.test(message.from)){this.monitor.reject('destination_or_own');return;}
    if(message.from===client.info?.wid?._serialized||message.from===client.info?.lid?._serialized)return;
    // Reconnection can replay history. Only accept new, identifiable customer messages.
-   if(!message.id?._serialized||!Number.isFinite(message.timestamp)||message.timestamp<readyAt||message._data?.isNewMsg===false)return;
+   if(!message.id?._serialized||!Number.isFinite(message.timestamp)||message.timestamp<readyAt||message._data?.isNewMsg===false){this.monitor.reject('history_or_timestamp');return;}
    const text=['chat','buttons_response','list_response','template_button_reply'].includes(message.type);
    const attachment=['audio','ptt','image','album','video','document','sticker','location','vcard','multi_vcard','order','product','groups_v4_invite','poll_creation'].includes(message.type);
    // Internal events, including encryption and call notifications, are not customer requests.
-   if(!text&&!attachment)return;
+   if(!text&&!attachment){this.monitor.reject('type');return;}
    const body=attachment?'[Áudio ou anexo recebido — requer atendimento humano]':(message.selectedButtonId||message.selectedRowId||message.body);
-   if(typeof body!=='string'||!body.trim())return;
+   if(typeof body!=='string'||!body.trim()){this.monitor.reject('empty');return;}
    if(group){this.store.addGroupMessage({id:message.from,providerId:message.id._serialized,author:message._data?.notifyName||message.author?.replace(/@.*$/,'')||'Participante',body:attachment?'[Áudio ou anexo recebido no grupo]':body,created:message.timestamp*1000});return;}
    const mapped=this.store.get("SELECT c.phone FROM whatsapp_chat_aliases a JOIN chats c ON c.id=a.chat_id WHERE a.alias=? AND c.channel='whatsapp' AND c.provider='qr'",message.from);
-   const processing=this.receiver?.({phone:mapped?.phone||message.from,name:message._data?.notifyName||message.from.replace(/@.*$/,''),body,forceHuman:attachment,providerId:message.id._serialized,channel:'whatsapp',provider:'qr'});
+   const processing=this.receiver?.({phone:mapped?.phone||message.from,name:message._data?.notifyName||message.from.replace(/@.*$/,''),body,forceHuman:attachment,providerId:message.id._serialized,channel:'whatsapp',provider:'qr',liveVerified:true});
+   processing?.then(result=>{if(result?.duplicate)this.monitor.state.duplicates++;else if(!result?.ignored)this.monitor.state.accepted++;}).catch(()=>{});
    processing?.catch(error=>{if(this.generation===generation){this.logger.error(`[WhatsApp live] receive_failed: ${safeConnectionDetail(error)}`);this.store.event('error','Falha no processamento de uma mensagem recebida. Verifique a conversa.');}});
    if(message.type==='image'&&typeof message.downloadMedia==='function'&&processing){
     const task=processing.then(async result=>{
@@ -93,6 +97,10 @@ export class WhatsApp {
   client.on('cota_live_error',()=>{if(this.generation===generation&&this.client===client)this.logger.error('[WhatsApp live] message_model_unavailable');});
   Promise.resolve().then(()=>client.initialize()).catch(error=>{if(this.generation===generation&&this.client===client&&this.status!=='error')this.connectionFailed(error);});
   return this.snapshot();
+ }
+ async diagnostics(){
+  await Promise.race([this.monitor.check(),new Promise(resolve=>{const timer=setTimeout(resolve,5500);timer.unref?.();})]);
+  return{version:manifest.version,serverTime:new Date().toISOString(),connection:this.status,agentEnabled:this.store.settings().agentEnabled!==false,realtime:this.monitor.snapshot(),history:this.store.all("SELECT h.status,count(*) count FROM whatsapp_history_sync h JOIN chats c ON c.id=h.chat_id WHERE c.channel='whatsapp' AND c.provider='qr' GROUP BY h.status"),messages:this.store.all("SELECT direction,status,inbound_verified,count(*) count FROM messages m JOIN chats c ON c.id=m.chat_id WHERE c.channel='whatsapp' AND c.provider='qr' AND m.created>=? GROUP BY direction,status,inbound_verified",Date.now()-30*86400000)};
  }
  sync(){return this.syncer.run();}
  loadGroupHistory(id){return this.syncer.groupHistory(id);}
@@ -191,5 +199,5 @@ export class WhatsApp {
    this.stage=null;this.update('disconnected');return await this.startConnection();
   }catch(error){const failure=error.message==='COTA_BROWSER_CLOSE_TIMEOUT'?error:profileRecoveryError(error);this.logger.error(`[WhatsApp profile] stage=${failure.stage||'browser_close'} code=${failure.code||'COTA_BROWSER_CLOSE_TIMEOUT'}${failure.fsCode?' fs='+failure.fsCode:''}`);this.connectionFailed(failure);throw Object.assign(new Error(this.error),{status:409});}
  }
- async close(){++this.generation;this.clearStartup();this.syncer.reset();this.readSync.reset();this.avatars.reset();await this.connecting?.catch(()=>{});await this.disconnecting?.catch(()=>{});await this.recovering?.catch(()=>{});++this.generation;this.clearStartup();if(this.client)await closeClient(this.client,this.cleanupTimeout).catch(()=>{});}
+ async close(){this.monitor.reset();++this.generation;this.clearStartup();this.syncer.reset();this.readSync.reset();this.avatars.reset();await this.connecting?.catch(()=>{});await this.disconnecting?.catch(()=>{});await this.recovering?.catch(()=>{});++this.generation;this.clearStartup();if(this.client)await closeClient(this.client,this.cleanupTimeout).catch(()=>{});}
 }

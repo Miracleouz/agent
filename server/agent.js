@@ -110,11 +110,13 @@ export class Agent {
   }
   return this.enqueue(`${input.provider||'qr'}:${input.channel}:${input.phone}`,async()=>{const result=await this.process(input);if(result.chatId&&!result.closed&&!result.duplicate&&!result.ignored)this.followups.schedule(result.chatId);return result;});
  }
- async process({phone,name,body,providerId,channel='whatsapp',provider='qr',isGroup=false,fromMe=false,isStatus=false,forceHuman=false}){
-  if(isGroup||fromMe||isStatus||/@g\.us$|@broadcast$|@newsletter$/.test(phone))return{ignored:true};if(!body?.trim())return{ignored:true};if(providerId&&this.store.get('SELECT id FROM messages WHERE provider_id=?',providerId))return{duplicate:true};this.store.resumeExpired();
+ async process({phone,name,body,providerId,channel='whatsapp',provider='qr',isGroup=false,fromMe=false,isStatus=false,forceHuman=false,liveVerified=false}){
+  if(isGroup||fromMe||isStatus||/@g\.us$|@broadcast$|@newsletter$/.test(phone))return{ignored:true};if(!body?.trim())return{ignored:true};const imported=providerId&&this.store.get('SELECT * FROM messages WHERE provider_id=?',providerId);
+  if(imported&&!(liveVerified===true&&channel==='whatsapp'&&provider==='qr'&&imported.status==='imported'&&imported.direction==='in'&&imported.inbound_verified===0&&this.store.get('SELECT id FROM chats WHERE id=? AND phone=? AND channel=? AND provider=?',imported.chat_id,phone,channel,provider)))return{duplicate:true};this.store.resumeExpired();
   let chat=this.store.get('SELECT * FROM chats WHERE phone=? AND channel=? AND provider=?',phone,channel,provider);const now=this.now();if(!chat){const id=randomUUID();this.store.run('INSERT INTO chats(id,phone,name,channel,provider,updated,last_inbound) VALUES(?,?,?,?,?,?,?)',id,phone,name||phone.replace(/@.*$/,''),channel,provider,now,now);chat=this.store.chat(id);}
-  this.store.run('UPDATE chats SET unread=unread+1,last_inbound=? WHERE id=?',now,chat.id);const inbound=this.store.addMessage({chatId:chat.id,providerId,direction:'in',body:body.trim()});
-  this.store.run('UPDATE messages SET inbound_verified=1 WHERE id=?',inbound.id);
+  this.store.run('UPDATE chats SET unread=unread+1,last_inbound=? WHERE id=?',now,chat.id);const inbound=imported||this.store.addMessage({chatId:chat.id,providerId,direction:'in',body:body.trim()});
+  if(imported){this.store.run("UPDATE messages SET body=?,status='received',created=? WHERE id=?",body.trim(),now,inbound.id);this.store.run('UPDATE chats SET updated=? WHERE id=?',now,chat.id);}
+  this.store.run('UPDATE messages SET inbound_verified=1 WHERE id=?',inbound.id);if(imported)this.store.changed();
   this.store.cancelFollowups(chat.id,{keepDelivery:true});
   const quotedOptions=JSON.parse(chat.quoted_options||'[]');
   const analysis=classifyMessage(body,{options:quotedOptions,pendingMeasure:chat.pending_measure,pendingSelection:chat.pending_selection});
