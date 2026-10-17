@@ -61,3 +61,5 @@ Nesta versão, o atendimento automático envia um único aviso e encerra após c
 Não execute `docker compose down -v` nem exclua o volume `cota-data`. O nome real do volume costuma incluir o nome do projeto Compose. Mantenha a mesma instalação/projeto para preservar estoque, acessos, histórico e sessão. Caso a sessão de WhatsApp tenha expirado, gere um novo QR no painel.
 
 O pacote foi verificado com 3.361 testes automatizados, 48 testes de navegador e build de produção. A imagem também foi construída e passou 18 verificações de integração em Docker com init, usuário node e volume persistente, usando módulos de WhatsApp simulados e sem parear número. Construa a imagem na sua instalação pelo comando acima.
+
+Se a recuperação pelo painel não concluir, há um [procedimento de recuperação offline pelo Docker](docs/RECUPERACAO_FORA_DO_PAINEL.md) para a instalação padrão. Ele usa a imagem e o volume exatos do contêiner existente e verifica se outros contêineres ainda usam esse volume, sem exigir outra atualização do aplicativo.

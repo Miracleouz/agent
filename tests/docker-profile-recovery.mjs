@@ -5,8 +5,9 @@ import {promisify} from 'node:util';
 import {randomUUID} from 'node:crypto';
 import {chromium} from '@playwright/test';
 const exec=promisify(execFile),args=process.argv.slice(2),image=args[0];
-if(!image||args.some((arg,index)=>index>0&&arg!=='--expect-old-failure'))throw new Error('Usage: node tests/docker-profile-recovery.mjs IMAGE [--expect-old-failure]');
-const old=args.includes('--expect-old-failure'),suffix=randomUUID().slice(0,8),volume=`cota-qr-test-${suffix}`;
+if(!image||args.some((arg,index)=>index>0&&!['--expect-old-failure','--offline-recovery'].includes(arg)))throw new Error('Usage: node tests/docker-profile-recovery.mjs IMAGE [--expect-old-failure | --offline-recovery]');
+const old=args.includes('--expect-old-failure'),offline=args.includes('--offline-recovery'),suffix=randomUUID().slice(0,8),volume=`cota-qr-test-${suffix}`;
+assert(!(old&&offline),'Choose only one recovery mode');
 let name,base,cookie='',browserProcess,uiBrowser,page,checks=0;
 const docker=async(...args)=>(await exec('docker',args,{maxBuffer:4*1024*1024})).stdout.trim();
 const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
@@ -39,7 +40,25 @@ try{
  await api('/settings',{businessName:'Docker preserved'},'PATCH');const simulated=await api('/simulator/message',{phone:'demo-cliente',name:'Docker customer fixture',body:'oi vim pelo site'});assert.equal(simulated.status,201);const chatId=simulated.value.chatId;
  await docker('exec',name,'node','--input-type=module','-e',"import fs from 'node:fs';const root='/app/data/whatsapp/session';fs.mkdirSync(root,{recursive:true});fs.writeFileSync(root+'/test-auth-marker','preserve');for(const key of ['SingletonLock','SingletonCookie','SingletonSocket'])fs.symlinkSync(key==='SingletonLock'?'old-docker-container-347':'/tmp/retired/'+key,root+'/'+key);");
  await connect('error');
- if(old){const r=await api('/whatsapp/recover',{allOtherInstancesStopped:true});assert.equal(r.status,409);assert.match(r.value.error,/profile_recovery_failed/);checks++;console.log(`REPRODUCED: 1.15.5 refuses recovery with docker-init and uid=1000 (${checks} checks).`);}
+ if(offline){
+  // Use the running container's actual image/volume, rather than a guessed
+  // Compose project name or a newly extracted installation directory.
+  const currentImage=await docker('inspect','--format','{{.Image}}',name);
+  const mounts=JSON.parse(await docker('inspect','--format','{{json .Mounts}}',name));
+  const currentVolume=mounts.find(mount=>mount.Type==='volume'&&mount.Destination==='/app/data')?.Name;
+  assert.equal(currentVolume,volume);assert.match(currentImage,/^sha256:/);
+  assert.equal(await docker('inspect','--format','{{range .Mounts}}{{if and (eq .Destination "/app/data") (eq .Type "volume")}}{{.Name}}{{end}}{{end}}',name),volume);
+  assert.equal(await docker('volume','inspect','--format','{{.Driver}}',volume),'local');
+  assert(['null','{}'].includes(await docker('volume','inspect','--format','{{json .Options}}',volume)));checks++;
+  assert.notEqual(await docker('ps','--filter','volume='+volume,'--format','{{.Names}}'),'');checks++;
+  await docker('stop','--time','30',name);
+  assert.equal(await docker('ps','--filter','volume='+volume,'--format','{{.Names}}'),'');checks++;
+  const report=await docker('run','--rm','--init','--network','none','--label','cota.disposable-profile-test=true','--mount','type=volume,source='+currentVolume+',target=/app/data','-e','DATA_DIR=/app/data','--entrypoint','node',currentImage,'server/recover-whatsapp-profile.js','--clear-stale-locks','--confirm-all-instances-stopped');
+  assert.match(report,/3 links de bloqueio removidos/);checks++;
+  await docker('start',name);base='http://'+(await docker('port',name,'3000/tcp')).split('\n')[0];await until(async()=>{try{return(await fetch(base+'/api/health')).ok;}catch{return false;}});await login();await connect('qr');await preserved(chatId);
+  console.log(`PASS: offline recovery using exact container image and volume, active-volume checks, isolated maintenance without network, preserved user/history/authentication, QR after restart and no sends (${checks} checks).`);
+ }
+ else if(old){const r=await api('/whatsapp/recover',{allOtherInstancesStopped:true});assert.equal(r.status,409);assert.match(r.value.error,/profile_recovery_failed/);checks++;console.log(`REPRODUCED: 1.15.5 refuses recovery with docker-init and uid=1000 (${checks} checks).`);}
  else{
   await panel();await recoverInPanel();await preserved(chatId);
   for(let cycle=0;cycle<3;cycle++){await page.getByRole('button',{name:'Desconectar sessão',exact:true}).click();await page.getByRole('button',{name:'Gerar QR Code',exact:true}).waitFor({state:'visible'});assert.equal((await state()).status,'disconnected');await page.getByRole('button',{name:'Gerar QR Code',exact:true}).click();await page.getByAltText('QR Code para conectar seu WhatsApp').waitFor({state:'visible'});assert.equal((await state()).status,'qr');checks++;await preserved(chatId);}
