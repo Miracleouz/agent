@@ -95,6 +95,7 @@ export class WhatsAppSync{
   const text=['chat','buttons_response','list_response','template_button_reply'].includes(message.type),media=['image','audio','ptt','video','document','sticker','location','vcard','multi_vcard'].includes(message.type);if(!text&&!media)return;
   const body=String(message.body|| (media?'[Anexo anterior à conexão — disponível no WhatsApp]':'')).trim().slice(0,10000);if(!body)return;
   this.store.run('INSERT OR IGNORE INTO messages(id,chat_id,provider_id,direction,body,status,created,author_name,inbound_verified) VALUES(?,?,?,?,?,?,?,?,0)',randomUUID(),chat.id,providerId,incoming?'in':'owner',body,'imported',created,incoming?null:'Enviado pelo WhatsApp');
+  const kind={image:'image',video:'video',audio:'audio',ptt:'audio'}[message.type];if(kind)this.store.run('UPDATE messages SET media_kind=? WHERE provider_id=? AND chat_id=?',kind,providerId,chat.id);
   this.store.run('UPDATE chats SET updated=MAX(updated,?) WHERE id=?',created,chat.id);
  }
  contact(person,{force=false}={}){

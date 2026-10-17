@@ -63,7 +63,7 @@ for(const guard of ['manual','desligado','responsável','liberada','atendente','
  }
  if(guard==='atendente')await receive('quero falar com atendente');
  if(guard==='pedido confirmado'){store.cancelFollowups(result.chatId);store.run("UPDATE chats SET order_state='confirmed' WHERE id=?",result.chatId);}
- const count=sent.length;await receive('vou mandar o motorista');assert.equal(sent.length,count);assert.equal(store.chat(result.chatId).delivery_method,'retira');assert.equal(store.chat(result.chatId).pickup_prompted_at,null);
+ const count=sent.length;await receive('vou mandar o motorista');assert.equal(sent.length,count+(guard==='liberada'?1:0));assert.equal(store.chat(result.chatId).delivery_method,'retira');if(guard==='liberada')assert(store.chat(result.chatId).pickup_prompted_at);else assert.equal(store.chat(result.chatId).pickup_prompted_at,null);
 });
 for(const [flag,value] of [['isGroup',true],['fromMe',true],['isStatus',true],['phone','120363000000@g.us'],['phone','status@broadcast'],['phone','123@newsletter']])test(`retirada ignora ${flag}=${value}`,async t=>{
  const{store,agent,sent,receive,advance}=fixture(t);await receive('vou mandar o motorista',{[flag]:value});advance(30*day);await agent.followups.check();assert.equal(sent.length,0);assert.equal(store.chats().length,0);

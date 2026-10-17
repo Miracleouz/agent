@@ -4,6 +4,8 @@ import QRCode from 'qrcode';
 import {existsSync} from 'node:fs';
 import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
+import {mediaInfo,maxMediaBytes} from './media.js';
+import {AudioTranscription} from './audio-transcription.js';
 import {photoInfo,maxPhotoBytes} from './images.js';
 import {connectionError,safeConnectionDetail,authenticationTimeout} from './connection-errors.js';
 import {WhatsAppMonitor} from './whatsapp-monitor.js';
@@ -20,7 +22,7 @@ function bounded(operation,timeout,code){return new Promise((resolve,reject)=>{c
 const closures=new WeakMap();
 function closeClient(client,timeout){if(!closures.has(client))closures.set(client,bounded(()=>client.destroy(),timeout,'COTA_BROWSER_CLOSE_TIMEOUT'));return closures.get(client);}
 export class WhatsApp {
- constructor(store,dataDir,{clientFactory=options=>new WhatsAppClient(options),logger=console,startupTimeout=null,cleanupTimeout=6000}={}){this.store=store;this.dataDir=dataDir;this.clientFactory=clientFactory;this.logger=logger;this.startupTimeout=startupTimeout;this.cleanupTimeout=cleanupTimeout;this.client=null;this.status='disconnected';this.qr=null;this.error=null;this.number=null;this.receiver=null;this.generation=0;this.mediaTasks=new Set();this.monitor=new WhatsAppMonitor(this);this.syncer=new WhatsAppSync(this);this.readSync=new WhatsAppReadSync(this);this.avatars=new WhatsAppAvatars(this);}
+ constructor(store,dataDir,{clientFactory=options=>new WhatsAppClient(options),logger=console,startupTimeout=null,cleanupTimeout=6000}={}){this.store=store;this.dataDir=dataDir;this.clientFactory=clientFactory;this.logger=logger;this.startupTimeout=startupTimeout;this.cleanupTimeout=cleanupTimeout;this.client=null;this.status='disconnected';this.qr=null;this.error=null;this.number=null;this.receiver=null;this.generation=0;this.mediaTasks=new Set();this.transcription=new AudioTranscription(store,dataDir);this.monitor=new WhatsAppMonitor(this);this.syncer=new WhatsAppSync(this);this.readSync=new WhatsAppReadSync(this);this.avatars=new WhatsAppAvatars(this);}
  snapshot(){return {status:this.status,qr:this.qr,error:this.error,number:this.number,transport:'qr',nativeButtons:false,progress:{stage:this.stage||null,message:connectionStageLabel(this.stage),deadlineAt:this.deadlineAt||null},sync:this.syncer.snapshot(),realtime:this.monitor.snapshot()};}
  clearStartup(){clearTimeout(this.startupTimer);this.startupTimer=null;this.deadlineAt=null;}
  progress(stage){if(!connectionStageLabel(stage)||stage===this.stage)return;this.stage=stage;this.logger.info?.(`[WhatsApp connect] stage=${stage}`);this.store.changed();}
@@ -85,21 +87,22 @@ export class WhatsApp {
    if(group){this.store.addGroupMessage({id:message.from,providerId:message.id._serialized,author:message._data?.notifyName||message.author?.replace(/@.*$/,'')||'Participante',body:attachment?'[Áudio ou anexo recebido no grupo]':body,created:message.timestamp*1000});return;}
    const mapped=this.store.get("SELECT c.phone FROM whatsapp_chat_aliases a JOIN chats c ON c.id=a.chat_id WHERE a.alias=? AND c.channel='whatsapp' AND c.provider='qr'",message.from);
    const processing=this.receiver?.({phone:mapped?.phone||message.from,name:message._data?.notifyName||message.from.replace(/@.*$/,''),body,forceHuman:attachment,providerId:message.id._serialized,channel:'whatsapp',provider:'qr',liveVerified:true});
-   processing?.then(result=>{if(result?.duplicate)this.monitor.state.duplicates++;else if(!result?.ignored)this.monitor.state.accepted++;}).catch(()=>{});
+   processing?.then(result=>{const row=this.store.get('SELECT id FROM messages WHERE provider_id=?',message.id._serialized);if(row){const kind={image:'image',video:'video',audio:'audio',ptt:'audio'}[message.type];if(kind){this.store.run('UPDATE messages SET media_kind=? WHERE id=?',kind,row.id);this.store.changed();}if(message.hasQuotedMsg&&typeof message.getQuotedMessage==='function'){const task=this.hydrateQuote(row.id,message,client,generation).catch(()=>{});this.trackMedia(task);}}if(result?.duplicate)this.monitor.state.duplicates++;else if(!result?.ignored)this.monitor.state.accepted++;}).catch(()=>{});
    processing?.catch(error=>{if(this.generation===generation){this.logger.error(`[WhatsApp live] receive_failed: ${safeConnectionDetail(error)}`);this.store.event('error','Falha no processamento de uma mensagem recebida. Verifique a conversa.');}});
-   if(message.type==='image'&&typeof message.downloadMedia==='function'&&processing){
+   if(['image','video','audio','ptt'].includes(message.type)&&typeof message.downloadMedia==='function'&&processing){
     const task=processing.then(async result=>{
      const existing=result.duplicate?this.store.get("SELECT chat_id,media_type FROM messages WHERE provider_id=? AND direction='in' AND inbound_verified=1",message.id._serialized):null;
      const chatId=result.chatId||existing?.chat_id;if(!chatId||result.ignored||existing?.media_type)return;
-     const media=await message.downloadMedia();if(this.generation!==generation||this.client!==client||!media?.data||media.data.length>Math.ceil(maxPhotoBytes*4/3)+4)return;
-     const data=Buffer.from(media.data,'base64'),info=photoInfo(data);
-     this.store.run("UPDATE messages SET media_type=?,media_name=?,media_size=?,media_data=?,body=? WHERE provider_id=? AND chat_id=? AND direction='in' AND inbound_verified=1",info.type,'foto.'+info.extension,data.length,data,String(message.body||'').slice(0,4000),message.id._serialized,chatId);this.store.changed();
+     const media=await message.downloadMedia();if(this.generation!==generation||this.client!==client||!media?.data||media.data.length>Math.ceil(maxMediaBytes*4/3)+4)return;
+     const data=Buffer.from(media.data,'base64'),info=mediaInfo(data,media.mimetype);
+     this.store.run("UPDATE messages SET media_type=?,media_kind=?,media_name=?,media_size=?,media_data=?,body=? WHERE provider_id=? AND chat_id=? AND direction='in' AND inbound_verified=1",info.type,info.kind,'arquivo.'+info.extension,data.length,data,String(message.body||'').slice(0,4000),message.id._serialized,chatId);this.store.changed();if(info.kind==='audio'&&process.env.AUTO_TRANSCRIBE==='true')this.transcription.request(this.store.get('SELECT id FROM messages WHERE provider_id=?',message.id._serialized).id).catch(()=>{});
     }).catch(()=>{});this.mediaTasks.add(task);task.finally(()=>this.mediaTasks.delete(task));
    }
   };
   client.on('message',received);
   client.on('cota_live_message',message=>{if(message?.fromMe)this.mirrorOutgoing(message,client,generation);else received(message);});
-  client.on('message_create',message=>{if(!client.cotaLiveEvents)this.mirrorOutgoing(message,client,generation);});
+  client.on('message_create',message=>{const task=this.mirrorOutgoing(message,client,generation);if(message.fromMe||message.id?.fromMe){if(['image','video','audio','ptt'].includes(message.type)&&typeof message.downloadMedia==='function')this.trackMedia(this.hydrateOutgoingMedia(message,task));}});
+  client.on('message_reaction',reaction=>{if(this.client!==client||this.generation!==generation||this.status!=='ready')return;const id=reaction.msgId?._serialized||reaction.msgId?.$1||reaction.msgId,m=this.store.get('SELECT id FROM messages WHERE provider_id=?',typeof id==='string'?id:'');if(!m)return;const ownIds=[client.info?.wid?._serialized||client.info?.wid?.$1,client.info?.lid?._serialized||client.info?.lid?.$1].filter(Boolean),sender=typeof reaction.senderId==='string'?reaction.senderId:reaction.senderId?._serialized||reaction.senderId?.$1;if(!sender)return;this.store.setReaction(m.id,ownIds.includes(sender)?'store':sender,String(reaction.reaction||'').slice(0,32),ownIds.includes(sender)?'WhatsApp da loja':'Cliente');});
   client.on('cota_live_error',()=>{if(this.generation===generation&&this.client===client)this.logger.error('[WhatsApp live] message_model_unavailable');});
   Promise.resolve().then(()=>client.initialize()).catch(error=>{if(this.generation===generation&&this.client===client&&this.status!=='error')this.connectionFailed(error);});
   return this.snapshot();
@@ -132,12 +135,12 @@ export class WhatsApp {
  loadHistory(chat,options){return this.syncer.history(chat,options);}
  loadContactHistory(person,options){return this.syncer.contact(person,options);}
  markRead(chat,options){return this.readSync.mark(chat,options);}
- async send(chat,body,actions){
+ async send(chat,body,actions,options={}){
   if(this.status!=='ready'||!this.client)throw new Error('WhatsApp desconectado. Conecte no painel e reenvie a mensagem.');
   if(/@g\.us$|@broadcast$|@newsletter$/.test(chat.phone))throw new Error('O envio para grupos é bloqueado.');
   const numbered=actions?.length&&['close_order','help_yes','delivery_pickup'].includes(actions[0].id);
   const menu=numbered?'\n\n'+actions.map((a,i)=>`${i+1} — ${a.label}`).join('\n')+(actions.length===2?'\n\nResponda *1* ou *2*.':'\n\nResponda *1*, *2* ou *3*.'):actions?.length?'\n\n'+actions.map(a=>a.id==='more'?'↪ Digite *MAIS* para ver mais opções.':'👤 Digite *ATENDENTE* para falar com uma pessoa.').join('\n'):'';
-  return sendConfirmed(this,chat,body+menu);
+  return sendConfirmed(this,chat,body+menu,{...(options.quotedMessageId?{quotedMessageId:options.quotedMessageId,ignoreQuoteErrors:false}:{})});
  }
  async resolveContact(phone){
   if(this.status!=='ready'||!this.client)throw Object.assign(new Error('Conecte o WhatsApp antes de iniciar uma conversa.'),{status:409});
@@ -151,6 +154,13 @@ export class WhatsApp {
   if(aliases.includes((client.info?.wid?._serialized||client.info?.wid?.$1))||aliases.includes((client.info?.lid?._serialized||client.info?.lid?.$1)))throw Object.assign(new Error('Escolha o WhatsApp de um cliente, diferente do número da loja.'),{status:400});
   return{id,aliases};
  }
+ trackMedia(task){this.mediaTasks.add(task);task.finally(()=>this.mediaTasks.delete(task)).catch(()=>{});return task;}
+ async hydrateQuote(id,message,client,generation){const quote=await message.getQuotedMessage();if(!quote||this.client!==client||this.generation!==generation)return;const chat=this.store.chat(this.store.get('SELECT chat_id FROM messages WHERE id=?',id)?.chat_id);if(!chat||!this.belongsToChat(quote,chat))return;const provider=quote.id?._serialized||quote.id?.$1;if(!provider)return;const local=this.store.get('SELECT id FROM messages WHERE provider_id=? AND chat_id=?',provider,chat.id);this.store.run('UPDATE messages SET quoted_message_id=?,quoted_provider_id=?,quoted_body=?,quoted_author=? WHERE id=?',local?.id||null,provider,String(quote.body||'[Mídia]').slice(0,4000),quote.fromMe?'WhatsApp da loja':chat.name,id);this.store.changed();}
+ async hydrateOutgoingMedia(message,task){try{await task;const row=this.store.get('SELECT id,media_type FROM messages WHERE provider_id=?',message.id?._serialized||message.id?.$1);if(!row||row.media_type)return;await this.loadMessageMedia(row.id,message);}catch{}}
+ async loadMessageMedia(id,source){const row=this.store.get('SELECT * FROM messages WHERE id=?',id);if(!row||row.media_type)return;const client=this.client,generation=this.generation;if(this.status!=='ready')throw new Error('WhatsApp desconectado.');const message=source||await client.getMessageById(row.provider_id),media=await message?.downloadMedia?.();if(!media?.data||media.data.length>Math.ceil(maxMediaBytes*4/3)+4)throw new Error('Mídia indisponível ou maior que 32 MB.');const data=Buffer.from(media.data,'base64'),info=mediaInfo(data,media.mimetype);if(this.client!==client||this.generation!==generation)return;this.store.run('UPDATE messages SET media_type=?,media_kind=?,media_name=?,media_size=?,media_data=? WHERE id=?',info.type,info.kind,'arquivo.'+info.extension,data.length,data,id);this.store.changed();}
+ async sendMedia(chat,file,caption,{quotedMessageId}={}){if(this.status!=='ready')throw new Error('WhatsApp desconectado.');if(!/^\d+@(c\.us|lid|s\.whatsapp\.net)$/.test(chat.phone))throw new Error('O envio para grupos é bloqueado.');const info=mediaInfo(file.data,file.type);return sendConfirmed(this,chat,new MessageMedia(info.type,file.data.toString('base64'),file.name),{caption,...(quotedMessageId?{quotedMessageId,ignoreQuoteErrors:false}:{})});}
+ async react(chat,providerId,emoji){if(this.status!=='ready')throw new Error('WhatsApp desconectado.');const client=this.client,generation=this.generation,message=await client.getMessageById(providerId);if(this.client!==client||this.generation!==generation||this.status!=='ready')throw new Error('WhatsApp desconectado.');if(!message||!this.belongsToChat(message,chat))throw new Error('Mensagem não encontrada nesta conversa.');await message.react(emoji);}
+ belongsToChat(message,chat){const target=message.fromMe?message.to:message.from;return target===chat.phone||this.store.get('SELECT chat_id FROM whatsapp_chat_aliases WHERE alias=?',target)?.chat_id===chat.id;}
  async sendPhoto(chat,photo,caption){
   if(this.status!=='ready'||!this.client)throw new Error('WhatsApp desconectado.');
   if(!/^\d+@(c\.us|lid|s\.whatsapp\.net)$/.test(chat.phone))throw new Error('O envio para grupos é bloqueado.');
@@ -207,5 +217,5 @@ export class WhatsApp {
    this.stage=null;this.update('disconnected');return await this.startConnection();
   }catch(error){const failure=error.message==='COTA_BROWSER_CLOSE_TIMEOUT'?error:profileRecoveryError(error);this.logger.error(`[WhatsApp profile] stage=${failure.stage||'browser_close'} code=${failure.code||'COTA_BROWSER_CLOSE_TIMEOUT'}${failure.fsCode?' fs='+failure.fsCode:''}`);this.connectionFailed(failure);throw Object.assign(new Error(this.error),{status:409});}
  }
- async close(){this.monitor.reset();++this.generation;this.clearStartup();this.syncer.reset();this.readSync.reset();this.avatars.reset();await this.connecting?.catch(()=>{});await this.disconnecting?.catch(()=>{});await this.recovering?.catch(()=>{});++this.generation;this.clearStartup();if(this.client)await closeClient(this.client,this.cleanupTimeout).catch(()=>{});await this.profileLease?.release();this.profileLease=null;}
+ async close(){this.transcription.close();this.monitor.reset();++this.generation;this.clearStartup();this.syncer.reset();this.readSync.reset();this.avatars.reset();await this.connecting?.catch(()=>{});await this.disconnecting?.catch(()=>{});await this.recovering?.catch(()=>{});++this.generation;this.clearStartup();if(this.client)await closeClient(this.client,this.cleanupTimeout).catch(()=>{});await this.profileLease?.release();this.profileLease=null;}
 }

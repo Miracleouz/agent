@@ -108,7 +108,7 @@ test('team member signs replies, shows typing and confirms orders in the shared 
   await colleague.getByRole('button',{name:'Enviar mensagem',exact:true}).click();await expect(page.locator('.message-role').filter({hasText:'Rafael Costa'})).toBeVisible();await expect(page.locator('.message-body').filter({hasText:'Vou conferir seu pedido'})).toBeVisible();
   const result=await colleague.evaluate(async()=>{const data=await(await fetch('/api/bootstrap')).json();const chat=data.chats.find(c=>c.phone==='demo-cliente');return(await(await fetch(`/api/chats/${chat.id}/messages`)).json()).at(-1);});
   expect(result.delivery_body).toBe('*Rafael Costa*: Olá! Vou conferir seu pedido.');expect(result.author_name).toBe('Rafael Costa');
-  await colleague.getByRole('button',{name:'Marcar pedido fechado',exact:true}).click();await expect(page.locator('.chat-notice').filter({hasText:'Pedido fechado.'})).toBeVisible();
+  await colleague.getByRole('button',{name:'Confirmar compra',exact:true}).click();await expect(colleague.getByRole('dialog')).toContainText('Confira a marca');await expect(colleague.getByRole('button',{name:'Revisar valores e estoque'})).toBeDisabled();await colleague.getByRole('button',{name:'Cancelar',exact:true}).click();
   await incoming('quero falar com atendente');await expect(page.locator('.chat-notice').filter({hasText:'também pediu para falar'})).toBeVisible();
   await page.screenshot({path:'test-results/shared-team-order.png',fullPage:true});
   await page.getByRole('button',{name:'Equipe',exact:true}).click();await page.getByRole('button',{name:'Desativar Rafael Costa',exact:true}).click();await expect(colleague.getByRole('button',{name:'Entrar no painel',exact:true})).toBeVisible({timeout:10000});

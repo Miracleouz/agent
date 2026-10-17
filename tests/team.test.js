@@ -78,14 +78,13 @@ test('resetting an agents password and case-insensitive duplicate email are hand
  await post(request.agent(app),'/api/auth/login',{email:first.email,password:'agent-pass-12345'}).expect(401);
  await post(request.agent(app),'/api/auth/login',{email:'CARLA@example.test',password:'reset-agent-12345'}).expect(200);
 });
-test('purchase, human request and manually confirmed order keep distinct visible alerts and send no unsolicited confirmation',async t=>{
+test('purchase and human alerts stay distinct; legacy confirmation without items is refused without sending',async t=>{
  const{first,store,chat,sent}=await fixture(t);const r=await chat('pode separar');assert.equal(store.chat(r.chatId).purchase_requested,1);assert.equal(store.chat(r.chatId).order_state,'interest');
  await chat('quero falar com o atendente');assert.equal(store.chat(r.chatId).human_requested,1);assert.equal(store.chat(r.chatId).purchase_requested,1);
  await post(first.client,`/api/chats/${r.chatId}/pause`,{minutes:null}).expect(200);const count=sent.length,stock=store.all('SELECT sku,quantity FROM products ORDER BY sku');
- await post(first.client,`/api/chats/${r.chatId}/order/confirm`).expect(200);const confirmed=store.chat(r.chatId);assert.equal(confirmed.handoff_reason,'order_closed');assert.equal(confirmed.order_state,'confirmed');assert.equal(confirmed.order_confirmed_name,first.name);assert.equal(confirmed.needs_human,1);
- await post(first.client,`/api/chats/${r.chatId}/order/confirm`).expect(200);assert.equal(sent.length,count);assert.deepEqual(store.all('SELECT sku,quantity FROM products ORDER BY sku'),stock);
- await chat('vou comprar');assert.equal(store.chat(r.chatId).order_state,'confirmed');assert.equal(store.chat(r.chatId).handoff_reason,'order_closed');assert.equal(sent.length,count);
- await post(first.client,`/api/chats/${r.chatId}/resume`).expect(200);assert.equal(store.chat(r.chatId).human_requested,0);assert.equal(store.chat(r.chatId).purchase_requested,0);assert.equal(store.chat(r.chatId).order_state,'confirmed');
+ await post(first.client,`/api/chats/${r.chatId}/order/confirm`).expect(409);assert.equal(store.chat(r.chatId).order_state,'interest');assert.equal(store.chat(r.chatId).human_requested,1);assert.equal(sent.length,count);assert.deepEqual(store.all('SELECT sku,quantity FROM products ORDER BY sku'),stock);
+ await chat('vou comprar');assert.equal(store.chat(r.chatId).order_state,'interest');assert.equal(sent.length,count);
+ await post(first.client,`/api/chats/${r.chatId}/resume`).expect(200);assert.equal(store.chat(r.chatId).human_requested,0);assert.equal(store.chat(r.chatId).purchase_requested,0);assert.equal(store.chat(r.chatId).order_state,'interest');
  await chat('quero fechar');assert.equal(store.chat(r.chatId).order_state,'interest');assert.equal(store.chat(r.chatId).handoff_reason,'purchase');
 });
 test('author history survives display name changes and human signature preference is applied server side',async t=>{
@@ -102,6 +101,6 @@ test('legacy owner credentials and sessions migrate without exposing hashes or l
  const store=new Store(file);const app=createApp({store,whatsapp:{snapshot:()=>({status:'ready'})}});t.after(()=>{app.locals.close();store.close();});
  const migrated=await request(app).get('/api/auth/status').set('Cookie',`cota_session=${token}`).expect(200);assert.equal(migrated.body.user.role,'admin');assert.equal(migrated.body.user.name,'Dono antigo');assert(!JSON.stringify(migrated.body).includes(hash));
  assert.equal(store.chat('old-purchase').order_state,'interest');assert.equal(store.chat('old-purchase').purchase_requested,1);assert.equal(store.chat('old-human').human_requested,1);assert.equal(store.chat('old-human').mode,'manual');
- await request(app).post('/api/chats/old-purchase/order/confirm').set('Cookie',`cota_session=${token}`).set('X-Cota-Request','1').send({}).expect(200);assert.equal(store.chat('old-purchase').order_state,'confirmed');
+ await request(app).post('/api/chats/old-purchase/order/confirm').set('Cookie',`cota_session=${token}`).set('X-Cota-Request','1').send({}).expect(409);assert.equal(store.chat('old-purchase').order_state,'interest');
  await post(request.agent(app),'/api/auth/login',{email:'old@example.test',password:'legacy-owner-12345'}).expect(200);
 });

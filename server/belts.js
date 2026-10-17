@@ -102,7 +102,7 @@ export function calculateBeltQuote(product,request,{openBeltPriceBasis='unconfir
   if(request.meters===null)return {ok:false,missing:'meters',spec};
   if(spec.unit!=='meter'||spec.mm===null)return {ok:false,review:'openStockUnit',spec};
   if(request.mm>spec.mm+1e-8)return {ok:false,insufficient:true};
-  const available=Math.floor((spec.mm+1e-8)/request.mm)*Math.floor((product.quantity+1e-8)/request.meters);
+  const lots=product.stock_lots?JSON.parse(product.stock_lots):null;const available=lots?lots.reduce((n,l)=>n+Math.floor((l.width+1e-8)/request.mm)*Math.floor((l.length+1e-8)/request.meters),0):Math.floor((spec.mm+1e-8)/request.mm)*Math.floor((product.quantity+1e-8)/request.meters);
   if(available<request.pieces)return {ok:false,insufficient:true};
   if(product.price===null)return {ok:true,unpriced:true,spec,factor:null,available};
   if(!['per_meter_mm','per_meter_full_width'].includes(openBeltPriceBasis))return {ok:false,review:'openPriceBasis',spec};
@@ -129,7 +129,7 @@ export function calculateBeltQuote(product,request,{openBeltPriceBasis='unconfir
  }
  if(missing)return {ok:false,missing,spec};
  const capacity=spec.unit==='ribs'?spec.ribs:spec.unit==='mm'?spec.mm:null;
- const available=spec.unit==='ribs'||spec.unit==='mm'?cutPiecesAvailable(product.quantity,capacity,factor):Math.floor((product.quantity+1e-8)/factor);
+ const available=spec.unit==='ribs'||spec.unit==='mm'?(product.stock_lots?JSON.parse(product.stock_lots).reduce((n,l)=>n+Math.floor((l.width+1e-8)/factor),0):cutPiecesAvailable(product.quantity,capacity,factor)):Math.floor((product.quantity+1e-8)/factor);
  if(available<request.pieces)return {ok:false,insufficient:true};
  if(product.price===null)return {ok:true,unpriced:true,spec,factor,available};
  const cents=Math.round(product.price*100);

@@ -211,3 +211,6 @@ A versão **1.16.0** corrige mensagens em tempo real e consulta dos últimos 30 
 A versão **1.16.1** recupera eventos após trocas de coleção do WhatsApp e exibe o histórico disponível durante a busca de páginas antigas. Veja [a validação e atualização](docs/CORRECAO_EVENTOS_E_HISTORICO_1_16_1.md).
 
 A versão **1.16.2** aceita os identificadores atuais do WhatsApp (`$1`) e protege o perfil entre contêineres. Veja [as instruções e testes](docs/CORRECAO_IDS_WHATSAPP_1_16_2.md).
+
+
+Os recursos de compra com baixa de estoque, mídia, resposta citada e transcrição local estão no [guia da versão 1.17.0](docs/ATENDIMENTO_E_ESTOQUE_1_17.md).

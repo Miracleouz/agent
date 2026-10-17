@@ -10,13 +10,15 @@ import {z} from 'zod';
 import {readRows,validateRows,replaceCatalog,fetchSheet,sheetExport} from './catalog.js';
 import {Agent} from './agent.js';
 import {contactRoutes} from './contacts.js';
+import {conversationToolsRoutes,quotedTarget} from './conversation-tools.js';
 import {messageToolsRoutes} from './message-tools.js';
+import {orderRoutes} from './orders.js';
 import {sendAvatar} from './avatar-response.js';
 const fail=(message,status=400)=>Object.assign(new Error(message),{status});
 export function createApp({store,whatsapp,production=false,appUrl=process.env.APP_URL}){
  const app=express();app.disable('x-powered-by');
  const secure=!!appUrl?.startsWith('https:');
- app.use(helmet({contentSecurityPolicy:production?{directives:{defaultSrc:["'self'"],scriptSrc:["'self'"],styleSrc:["'self'","'unsafe-inline'"],imgSrc:["'self'","data:","blob:"],connectSrc:["'self'"],upgradeInsecureRequests:secure?[]:null}}:false,strictTransportSecurity:secure?undefined:false}));
+ app.use(helmet({contentSecurityPolicy:production?{directives:{defaultSrc:["'self'"],scriptSrc:["'self'"],styleSrc:["'self'","'unsafe-inline'"],imgSrc:["'self'","data:","blob:"],connectSrc:["'self'"],mediaSrc:["'self'","blob:"],upgradeInsecureRequests:secure?[]:null}}:false,strictTransportSecurity:secure?undefined:false}));
  app.use(express.json({limit:'100kb'}));app.use(cookieParser());
  app.get('/api/health',(_req,res)=>res.json({ok:true}));
  app.use('/api',(req,res,next)=>{res.set('Cache-Control','no-store');if(['POST','PUT','PATCH','DELETE'].includes(req.method)){
@@ -96,27 +98,22 @@ export function createApp({store,whatsapp,production=false,appUrl=process.env.AP
   const key=chat.id+':'+req.user.id;if(input.typing){if(chat.mode!=='manual')throw fail('Assuma o atendimento antes de digitar.',409);typing.set(key,{chatId:chat.id,userId:req.user.id,name:req.user.name,expires:Date.now()+8000});}else typing.delete(key);
   store.changed();res.json({ok:true});
  });
- app.post('/api/chats/:id/order/confirm',(req,res)=>{
-  const chat=getChat(req.params.id);canControl(req,chat);
-  if(chat.mode!=='manual')throw fail('Assuma o atendimento antes de marcar o pedido.',409);
-  if(!['interest','confirmed'].includes(chat.order_state))throw fail('Não há intenção de compra registrada nesta conversa.',409);
-  if(chat.order_state==='confirmed')return res.json(chat);
-  store.cancelFollowups(chat.id);store.run("UPDATE chats SET mode='manual',pause_until=NULL,needs_human=1,handoff_reason='order_closed',order_state='confirmed',order_confirmed_at=?,order_confirmed_by=?,order_confirmed_name=?,assigned_user_id=COALESCE(assigned_user_id,?) WHERE id=?",Date.now(),req.user.id,req.user.name,req.user.id,chat.id);
-  store.event('order',`Pedido marcado como fechado por ${req.user.name}.`);res.json(store.chat(chat.id));
- });
- const agent=new Agent(store,(chat,body,actions)=>whatsapp.send(chat,body,actions),{canSend:chat=>chat.channel==='simulator'||whatsapp.snapshot().status==='ready'});whatsapp.receiver=input=>agent.receive(input);
+ orderRoutes({app,store,queued,visibleChat,canControl});
+ app.post('/api/chats/:id/order/confirm',(req,_res)=>{const chat=getChat(req.params.id);canControl(req,chat);throw fail('Atualize o painel e use Confirmar compra para revisar itens e baixar o estoque.',409);});
+ const agent=new Agent(store,(chat,body,actions,options)=>whatsapp.send(chat,body,actions,options),{canSend:chat=>chat.channel==='simulator'||whatsapp.snapshot().status==='ready'});whatsapp.receiver=input=>agent.receive(input);
  whatsapp.enqueueSideEffect=(chat,fn)=>agent.enqueue(`${chat.provider||'qr'}:${chat.channel}:${chat.phone}`,fn);
  contactRoutes({app,store,accounts,agent,whatsapp});
+ conversationToolsRoutes({app,store,agent,whatsapp,visibleChat,queued,canControl});
  messageToolsRoutes({app,store,accounts,agent,whatsapp,getChat,visibleChat,queued,canControl});
  app.post('/api/chats/:id/send',async(req,res)=>{
-  const original=getChat(req.params.id),{body,version}=z.object({body:z.string().trim().min(1).max(4000),version:z.number().int().min(0).optional()}).strict().parse(req.body);
+  const original=getChat(req.params.id),{body,version,replyTo}=z.object({replyTo:z.string().min(1).optional(),body:z.string().trim().min(1).max(4000),version:z.number().int().min(0).optional()}).strict().parse(req.body);
   const result=await agent.enqueue(`${original.provider}:${original.channel}:${original.phone}`,async()=>{
    const user=accounts.getUser(req);if(!user)throw fail('Entre novamente no painel.',401);
    const chat=getChat(original.id);if(chat.mode!=='manual')throw fail('Ative "Responder manual" antes de enviar.',409);canControl(req,chat);
    if(chat.routing_version!==original.routing_version||version!==undefined&&version!==chat.routing_version)throw fail('O atendimento mudou. Confira a conversa antes de enviar.',409);
    if(!chat.assigned_user_id)store.openChat(chat.id,user);
    typing.delete(chat.id+':'+user.id);const transportBody=store.settings().signHumanMessages?`*${user.name}*: ${body}`:body;
-   return agent.reply(chat,body,[],'owner',{author:user,transportBody});
+   return agent.reply(chat,body,[],'owner',{author:user,transportBody,quoted:quotedTarget(store,chat,replyTo)});
   });
   res.status(result.status==='failed'?502:result.status==='uncertain'?202:201).json(result.status==='failed'?{error:result.error,message:result}:result);
  });
@@ -124,7 +121,7 @@ export function createApp({store,whatsapp,production=false,appUrl=process.env.AP
   const input=z.object({phone:z.string().regex(/^demo-[a-zA-Z0-9-]{1,50}$/).default('demo-cliente'),name:z.string().trim().min(1).max(80).default('Cliente de teste'),body:z.string().trim().min(1).max(4000),isGroup:z.boolean().optional()}).parse(req.body);
   res.status(201).json(await agent.receive({...input,channel:'simulator',provider:'demo',providerId:randomUUID()}));
  });
- app.delete('/api/simulator',adminOnly,(req,res)=>{store.transaction(()=>{store.run("DELETE FROM message_edits WHERE message_id IN (SELECT id FROM messages WHERE chat_id IN (SELECT id FROM chats WHERE channel='simulator'))");store.run("DELETE FROM messages WHERE chat_id IN (SELECT id FROM chats WHERE channel='simulator')");store.run("DELETE FROM chats WHERE channel='simulator'");});store.changed();res.json({ok:true});});
+ app.delete('/api/simulator',adminOnly,(req,res)=>{store.transaction(()=>{store.run("DELETE FROM message_reactions WHERE message_id IN (SELECT id FROM messages WHERE chat_id IN (SELECT id FROM chats WHERE channel='simulator'))");store.run("DELETE FROM stock_movements WHERE order_id IN (SELECT id FROM sales_orders WHERE chat_id IN (SELECT id FROM chats WHERE channel='simulator'))");store.run("DELETE FROM sales_orders WHERE chat_id IN (SELECT id FROM chats WHERE channel='simulator')");store.run("DELETE FROM message_edits WHERE message_id IN (SELECT id FROM messages WHERE chat_id IN (SELECT id FROM chats WHERE channel='simulator'))");store.run("DELETE FROM messages WHERE chat_id IN (SELECT id FROM chats WHERE channel='simulator')");store.run("DELETE FROM chats WHERE channel='simulator'");});store.changed();res.json({ok:true});});
  app.get('/api/products',(req,res)=>{const search=String(req.query.search||'').slice(0,100),page=Math.max(0,Math.min(2000,Number(req.query.page)||0)),limit=100;const where='WHERE name LIKE ? OR brand LIKE ? OR variant LIKE ? OR sku LIKE ?',params=Array(4).fill(`%${search}%`);res.json({items:store.all('SELECT * FROM products '+where+' ORDER BY name,brand LIMIT ? OFFSET ?',...params,limit,page*limit),total:store.get('SELECT count(*) n FROM products '+where,...params).n,page,limit,unpriced:store.get('SELECT count(*) n FROM products WHERE price IS NULL').n});});
  app.get('/api/stock/template',(_req,res)=>res.type('text/csv').attachment('modelo-estoque.csv').send('\uFEFFsku;produto;marca;medida;preco;quantidade\nEXEMPLO-A42;Correia industrial em V;Marca exemplo;A-42;49,90;12\n'));
  const upload=multer({storage:multer.memoryStorage(),limits:{fileSize:8*1024*1024,files:1}});

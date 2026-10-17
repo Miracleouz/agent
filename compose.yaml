@@ -10,6 +10,7 @@ services:
       NODE_ENV: production
       APP_URL: ${APP_URL:-}
       WHATSAPP_AUTO_CONNECT: "true"
+      AUTO_TRANSCRIBE: ${AUTO_TRANSCRIBE:-false}
       WHATSAPP_AUTH_TIMEOUT_MS: ${WHATSAPP_AUTH_TIMEOUT_MS:-90000}
     volumes:
       - cota-data:/app/data
