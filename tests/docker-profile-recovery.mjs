@@ -5,7 +5,8 @@ import {promisify} from 'node:util';
 import {randomUUID} from 'node:crypto';
 import {chromium} from '@playwright/test';
 const exec=promisify(execFile),args=process.argv.slice(2),image=args[0];
-if(!image||args.some((arg,index)=>index>0&&!['--expect-old-failure','--offline-recovery'].includes(arg)))throw new Error('Usage: node tests/docker-profile-recovery.mjs IMAGE [--expect-old-failure | --offline-recovery]');
+if(!image||args.some((arg,index)=>index>0&&!['--expect-old-failure','--offline-recovery','--automatic-recovery'].includes(arg)))throw new Error('Usage: node tests/docker-profile-recovery.mjs IMAGE [--expect-old-failure | --offline-recovery]');
+const automatic=args.includes('--automatic-recovery');
 const old=args.includes('--expect-old-failure'),offline=args.includes('--offline-recovery'),suffix=randomUUID().slice(0,8),volume=`cota-qr-test-${suffix}`;
 assert(!(old&&offline),'Choose only one recovery mode');
 let name,base,cookie='',browserProcess,uiBrowser,page,checks=0,authMarkerPath='/app/data/whatsapp/session/test-auth-marker';
@@ -61,19 +62,20 @@ try{
  else if(old){const r=await api('/whatsapp/recover',{allOtherInstancesStopped:true});assert.equal(r.status,409);assert.match(r.value.error,/profile_recovery_failed/);checks++;console.log(`REPRODUCED: 1.15.5 refuses recovery with docker-init and uid=1000 (${checks} checks).`);}
  else{
   await panel();await recoverInPanel();await preserved(chatId);
+  if(automatic){await assert.rejects(docker('run','--rm','--init','--network','none','--label','cota.disposable-profile-test=true','-v',volume+':/app/data','--entrypoint','node',image,'server/recover-whatsapp-profile.js','--clear-stale-locks','--confirm-all-instances-stopped'),error=>/COTA_PROFILE_ACTIVE/.test(error.stderr));checks++;}
   for(let cycle=0;cycle<3;cycle++){await page.getByRole('button',{name:'Desconectar sessão',exact:true}).click();await page.getByRole('button',{name:'Gerar QR Code',exact:true}).waitFor({state:'visible'});assert.equal((await state()).status,'disconnected');await page.getByRole('button',{name:'Gerar QR Code',exact:true}).click();await page.getByAltText('QR Code para conectar seu WhatsApp').waitFor({state:'visible'});assert.equal((await state()).status,'qr');checks++;await preserved(chatId);}
   // An abrupt stop leaves real Chromium links with the previous hostname.
-  await page.close();page=null;await docker('kill',name);await docker('rm',name);name=null;await start(2);await login();await connect('error');await panel();await recoverInPanel();await preserved(chatId);
+  await page.close();page=null;await docker('kill',name);await docker('rm',name);name=null;await start(2);await login();await connect(automatic?'qr':'error');await panel();if(!automatic)await recoverInPanel();else checks++;await preserved(chatId);
   assert.equal((await api('/whatsapp/disconnect',{})).status,200);
   browserProcess=spawn('docker',['exec','-i',name,'node','tests/fixtures/docker-active-profile.mjs'],{stdio:['pipe','pipe','pipe']});let text='';browserProcess.stdout.on('data',data=>{text+=data;});let externalError='';browserProcess.stderr.on('data',data=>{externalError+=data;});await until(()=>text.includes('owned-browser-ready'));
-  await connect('error');const blocked=await api('/whatsapp/recover',{allOtherInstancesStopped:true});assert.equal(blocked.status,409);assert.match(blocked.value.error,/profile_active/);checks++;
+  await connect('error',automatic?'profile_active':'profile_busy');const blocked=await api('/whatsapp/recover',{allOtherInstancesStopped:true});assert.equal(blocked.status,409);assert.match(blocked.value.error,/profile_active/);checks++;
   const exited=new Promise((resolve,reject)=>{browserProcess.once('exit',code=>code===0?resolve():reject(new Error('Owned browser failed to close')));});browserProcess.stdin.end();await exited;browserProcess=null;
   await recover();await preserved(chatId);
   await api('/whatsapp/disconnect',{});await docker('exec',name,'node','--input-type=module','-e',"import fs from 'node:fs';fs.writeFileSync('/app/data/whatsapp/session/test-broken-shell','unavailable auth modules');");await connect('error','auth_modules|connection_timeout');
   await panel();await page.getByRole('button',{name:'Recriar conexão',exact:true}).click();const dialog=page.getByRole('dialog',{name:'Recriar conexão',exact:true});assert.equal(await dialog.getByRole('button',{name:'Recriar e gerar QR',exact:true}).isDisabled(),true);await dialog.getByRole('checkbox').check();await dialog.getByRole('button',{name:'Recriar e gerar QR',exact:true}).click();await dialog.waitFor({state:'hidden'});await page.getByAltText('QR Code para conectar seu WhatsApp').waitFor({state:'visible'});assert.equal((await state()).status,'qr');checks++;
   const backup=await docker('exec',name,'node','--input-type=module','-e',"import fs from 'node:fs';const backups=fs.readdirSync('/app/data/whatsapp').filter(name=>name.startsWith('session-backup-'));if(backups.length!==1)process.exit(1);console.log(backups[0]);");assert.match(backup,/^session-backup-[a-f0-9-]+$/);authMarkerPath='/app/data/whatsapp/'+backup+'/test-auth-marker';await preserved(chatId);
   await page.getByRole('button',{name:'Desconectar sessão',exact:true}).click();await page.getByRole('button',{name:'Gerar QR Code',exact:true}).waitFor({state:'visible'});assert.equal((await state()).status,'disconnected');await page.getByRole('button',{name:'Gerar QR Code',exact:true}).click();await page.getByAltText('QR Code para conectar seu WhatsApp').waitFor({state:'visible'});checks++;await preserved(chatId);
-  console.log(`PASS: Docker init + uid=1000, recovery, disconnect cycles, abrupt recreate, active-profile refusal, persistent-module timeout, explicit profile backup and new QR, preserved data and no sends (${checks} checks).`);
+  console.log(`PASS: Docker init + uid=1000, ${automatic?'automatic owned-profile recovery after abrupt container replacement, ':''}recovery, disconnect cycles, abrupt recreate, active-profile refusal, persistent-module timeout, explicit profile backup and new QR, preserved data and no sends (${checks} checks).`);
  }
 }finally{
  await uiBrowser?.close();

@@ -4,12 +4,12 @@ export function seedSendBrowser(){
  const wid=id=>({_serialized:id,isLid:()=>id.endsWith('@lid'),isGroup:()=>false,isStatus:()=>false});
  class Key{
   static async newId(){return 'COTA_TEST_'+(++state.sequence);}
-  constructor({to,id}){this.id=id;this.remote=to;this.fromMe=true;this._serialized='true_'+to._serialized+'_'+id;}
+  constructor({to,id}){this.id=id;this.remote=to;this.fromMe=true;this[state.modernKeys?'$1':'_serialized']='true_'+(to._serialized||to.$1)+'_'+id;}
  }
  const action={addAndSendMsgToChat(chat,message){
   if(state.mode==='reject')return [Promise.reject(new Error('send rejected')),Promise.resolve()];
   const data={...message,id:{...message.id},from:message.from._serialized,to:message.to._serialized};
-  state.sent.push(data);state.records.set(message.id._serialized,{...message,serialize(){if(state.mode==='serializer')throw new Error('r');return {...data};}});
+  state.sent.push(data);state.records.set(message.id._serialized||message.id.$1,{...message,serialize(){if(state.mode==='serializer')throw new Error('r');return {...data};}});
   if(state.mode==='partial_reject')return [Promise.reject(new Error('uncertain after enqueue')),Promise.resolve()];
   if(state.mode==='changed_queue')return [];
   return [Promise.resolve(message),Promise.resolve({ack:1})];

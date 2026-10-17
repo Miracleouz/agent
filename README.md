@@ -67,6 +67,8 @@ No painel, abra **WhatsApp → Gerar QR Code**. No celular, abra **Aparelhos con
 
 Se o QR não aparecer, consulte [Diagnóstico do QR](docs/DIAGNOSTICO_QR.md). O painel diferencia falhas de navegador, perfil ocupado, rede, certificados e permissões; `npm run whatsapp:diagnose` testa um perfil temporário sem parear números ou usar a sessão existente. No Docker, use `docker compose exec cota npm run whatsapp:diagnose`.
 
+A versão **1.16.2** corrige a leitura de IDs `$1` em mensagens, histórico e confirmação de envios, além de proteger o perfil com uma reserva exclusiva entre contêineres. Veja [a causa comprovada e a atualização](docs/CORRECAO_IDS_WHATSAPP_1_16_2.md).
+
 A versão **1.16.1** recupera os observadores após recargas internas e carrega o histórico disponível antes de aguardar páginas antigas. Inclui diagnóstico de mensagens sem conteúdo privado. Veja [a validação desta atualização](docs/CORRECAO_EVENTOS_E_HISTORICO_1_16_1.md).
 
 A versão **1.16.0** acompanha entradas e saídas do WhatsApp em tempo real, mantém a atualização do painel durante importações e consulta os últimos 30 dias em Conversas, Contatos e grupos. Veja [TEMPO_REAL_E_HISTORICO_30_DIAS.md](docs/TEMPO_REAL_E_HISTORICO_30_DIAS.md).
@@ -182,3 +184,5 @@ O estoque em metros limita o comprimento contínuo, e a largura informada limita
 A base padrão das abertas é preço por metro da faixa inteira. Alterar a configuração não reativa automaticamente conversas assumidas ou encaminhadas ao atendente.
 
 Na versão **1.16.1**, passaram **3.698 testes de servidor**, **52 testes de navegador** e o build. **325 testes de tempo real** passaram novamente na imagem Docker, além de **23 verificações** de conexão, desconexão e recuperação. Os eventos de WhatsApp são simulados; Chromium, SDK, servidor e painel são reais. Veja [o relatório da versão](docs/CORRECAO_EVENTOS_E_HISTORICO_1_16_1.md).
+
+Na versão **1.16.2**, passaram **4.008 testes de servidor**, **52 testes de navegador**, **628 testes repetidos dentro da imagem Docker** e **24 verificações de perfil/QR**. A suíte inclui o formato `$1` que faltava nas versões anteriores. Veja [o relatório](docs/CORRECAO_IDS_WHATSAPP_1_16_2.md).

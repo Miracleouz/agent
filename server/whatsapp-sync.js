@@ -5,7 +5,7 @@ import {readCachedRoster,cachedIdentities} from './whatsapp-roster.js';
 import {basicChat,readCachedHistory,requestCachedHistory} from './whatsapp-history.js';
 const privateId=id=>/^\d+@(c\.us|lid|s\.whatsapp\.net)$/.test(id||'');
 const groupId=id=>/^\d+(?:-\d+)?@g\.us$/.test(id||'');
-const idOf=value=>value?.id?._serialized;
+const idOf=value=>(value?.id?._serialized||value?.id?.$1);
 const stamp=value=>Number.isFinite(value)&&value>0?Math.min(value*1000,Date.now()):0;
 export const historyDays=30,historyWindow=historyDays*86400000;
 function bounded(fn,signal,ms){return new Promise((resolve,reject)=>{let done=false;const finish=(error,result)=>{if(done)return;done=true;clearTimeout(timer);signal.removeEventListener('abort',abort);error?reject(error):resolve(result);},abort=()=>finish(new Error('Sincronização cancelada.')),timer=setTimeout(()=>finish(new Error('Tempo limite ao consultar dados do WhatsApp.')),ms);signal.addEventListener('abort',abort,{once:true});if(signal.aborted)return abort();Promise.resolve().then(fn).then(result=>finish(null,result),finish);});}
@@ -40,7 +40,7 @@ export class WhatsAppSync{
    this.roster(client,'contacts',signal),
   ]);if(!checked())return this.snapshot();
   const values=results.map(result=>{if(result.status==='fulfilled'&&Array.isArray(result.value))return result.value;failures++;return[];});
-  const [chats,contacts]=values,own=new Set([client.info?.wid?._serialized,client.info?.lid?._serialized].filter(Boolean)),identities=new Map();
+  const [chats,contacts]=values,own=new Set([(client.info?.wid?._serialized||client.info?.wid?.$1),(client.info?.lid?._serialized||client.info?.lid?.$1)].filter(Boolean)),identities=new Map();
   for(const id of [...own])if(/@(?:c\.us|s\.whatsapp\.net)$/.test(id)){own.add(id.split('@')[0]+'@c.us');own.add(id.split('@')[0]+'@s.whatsapp.net');}
   const privateChats=chats.filter(chat=>!chat.isGroup&&privateId(idOf(chat))&&!own.has(idOf(chat)));
   const people=contacts.filter(contact=>privateId(idOf(contact))&&!contact.isMe&&!own.has(idOf(contact))&&contact.isMyContact===true&&contact.isWAContact!==false);

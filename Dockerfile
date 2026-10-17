@@ -9,7 +9,7 @@ COPY public ./public
 RUN npm run build && npm prune --omit=dev
 
 FROM node:24-bookworm-slim
-RUN apt-get update && apt-get install -y --no-install-recommends chromium ca-certificates fonts-liberation libnss3-tools && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends chromium ca-certificates fonts-liberation libnss3-tools util-linux && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 ENV NODE_ENV=production PORT=3000 HOST=0.0.0.0 CHROME_PATH=/usr/bin/chromium DATA_DIR=/app/data PUPPETEER_SKIP_DOWNLOAD=true
 COPY --from=build --chown=node:node /app/node_modules ./node_modules

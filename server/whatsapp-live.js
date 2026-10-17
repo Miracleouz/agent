@@ -8,7 +8,7 @@ export function installLiveBridge({binding,token}){
  const previous=window.__cotaLiveV1;
  if(previous?.token===token&&previous.Msg===Msg&&previous.Chat===Chat){previous.refresh();return true;}
  previous?.close();
- const id=value=>typeof value==='string'?value:value?._serialized;
+ const id=value=>typeof value==='string'?value:(value?._serialized||value?.$1);
  const pending=new Set(),seen=previous?.seen||new Set(),watched=new Map();let active=true;
  const stats=previous?.stats||{events:0,fresh:0,history:0,invalid:0,duplicates:0,delivered:0,bindingErrors:0,ciphertext:0,lastEventAt:null,lastDeliveryAt:null,repairs:0};if(previous)stats.repairs++;
  const invalid=reason=>{stats.invalid++;stats.rejected??={};stats.rejected[reason]=(stats.rejected[reason]||0)+1;return null;};
@@ -22,7 +22,7 @@ export function installLiveBridge({binding,token}){
  }
  const deliver=row=>{try{const message=snapshot(row);if(!message)return;if(seen.has(message.id._serialized)){stats.duplicates++;return;}stats.delivered++;stats.lastDeliveryAt=Date.now();seen.add(message.id._serialized);if(seen.size>5000)seen.delete(seen.values().next().value);emit({kind:'message',message});}catch{emit({kind:'error'});}};
  const added=row=>{try{
-  stats.events++;stats.lastEventAt=Date.now();if(row.isNewMsg!==true){stats.history++;return;}stats.fresh++;
+  stats.events++;stats.lastEventAt=Date.now();if(row.isNewMsg!==true){stats.history++;return;}stats.fresh++;stats.identifiers??={serialized:0,dollar1:0,missing:0};stats.identifiers[row.id?._serialized?'serialized':row.id?.$1?'dollar1':'missing']++;
   if(row.type==='ciphertext'){
    if(pending.has(row))return;pending.add(row);stats.ciphertext++;
    row.once?.('change:type',()=>{pending.delete(row);if(active&&row.type!=='revoked'&&row.type!=='ciphertext')deliver(row);});return;

@@ -4,23 +4,23 @@ import wa from 'whatsapp-web.js';
 export async function cachedHistory({chatId,limit,cutoff,loadEarlier=true,pageTimeout=5000}){
  const collections=window.require('WAWebCollections')||window.Store,Chat=collections?.Chat;
  let chat;try{chat=window.__cotaFindChatV1?.(chatId)||Chat?.get?.(chatId);}catch{}
- if(!chat){const rows=Chat?.getModelsArray?.()||Chat?.models||[];chat=rows.find(row=>(typeof row.id==='string'?row.id:row.id?._serialized)===chatId);}
+ if(!chat){const rows=Chat?.getModelsArray?.()||Chat?.models||[];chat=rows.find(row=>(typeof row.id==='string'?row.id:(row.id?._serialized||row.id?.$1))===chatId);}
  if(!chat)throw new Error('COTA_HISTORY_CHAT_UNAVAILABLE');
- const same=row=>{const value=row.id?.remote;return(typeof value==='string'?value:value?._serialized)===chatId||[row.from,row.to].some(value=>(typeof value==='string'?value:value?._serialized)===chatId);};
- const read=()=>{const local=chat.msgs?.getModelsArray?.()||chat.msgs?.models||[],global=collections?.Msg?.getModelsArray?.()||collections?.Msg?.models||[];return[...new Map([...global.filter(same),...local].map(row=>[row.id?._serialized,row])).values()];};
- let rows=read(),previous=new Set(rows.map(m=>m.id?._serialized));
+ const same=row=>{const value=row.id?.remote;return(typeof value==='string'?value:(value?._serialized||value?.$1))===chatId||[row.from,row.to].some(value=>(typeof value==='string'?value:(value?._serialized||value?.$1))===chatId);};
+ const read=()=>{const local=chat.msgs?.getModelsArray?.()||chat.msgs?.models||[],global=collections?.Msg?.getModelsArray?.()||collections?.Msg?.models||[];return[...new Map([...global.filter(same),...local].map(row=>[(row.id?._serialized||row.id?.$1),row])).values()];};
+ let rows=read(),previous=new Set(rows.map(m=>(m.id?._serialized||m.id?.$1)));
  let incomplete=false,pages=0;const deadline=Date.now()+8000;
  window.__cotaHistoryLoadsV1??=new WeakMap();
  while(loadEarlier&&rows.length<limit&&!(Number.isFinite(cutoff)&&rows.some(row=>Number(row.t)*1000<=cutoff))){
   if(pages++>=8||Date.now()>=deadline){incomplete=true;break;}
   let request=window.__cotaHistoryLoadsV1.get(chat);if(!request){request=Promise.resolve().then(()=>window.require('WAWebChatLoadMessages').loadEarlierMsgs({chat}));window.__cotaHistoryLoadsV1.set(chat,request);const clear=()=>{if(window.__cotaHistoryLoadsV1.get(chat)===request)window.__cotaHistoryLoadsV1.delete(chat);};request.then(clear,clear);}
   let loaded,timer;try{loaded=await Promise.race([request,new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('COTA_HISTORY_PAGE_TIMEOUT')),pageTimeout);})]);}catch{incomplete=true;break;}finally{clearTimeout(timer);}
-  const all=new Map([...rows,...(Array.isArray(loaded)?loaded:[]),...read()].map(m=>[m.id?._serialized,m]));
-  rows=[...all.values()];const next=new Set(rows.map(m=>m.id?._serialized));
+  const all=new Map([...rows,...(Array.isArray(loaded)?loaded:[]),...read()].map(m=>[(m.id?._serialized||m.id?.$1),m]));
+  rows=[...all.values()];const next=new Set(rows.map(m=>(m.id?._serialized||m.id?.$1)));
   if(next.size===previous.size&&[...next].every(id=>previous.has(id)))break;previous=next;
  }
  rows.sort((a,b)=>(a.t||0)-(b.t||0));const messages=[];let skipped=0;
- const id=value=>typeof value==='string'?value:value?._serialized;
+ const id=value=>typeof value==='string'?value:(value?._serialized||value?.$1);
  for(const row of rows.slice(-limit)){try{
   const providerId=id(row.id);if(!providerId||row.isNotification)continue;
   const own=row.id?.fromMe===true,remote=id(row.id?.remote);
@@ -37,7 +37,7 @@ export async function readCachedHistory(client,id,limit,cutoff,options={}){
 export async function requestCachedHistory(chatId){
  const Chat=(window.require('WAWebCollections')||window.Store)?.Chat;
  let chat;try{chat=window.__cotaFindChatV1?.(chatId)||Chat?.get?.(chatId);}catch{}
- if(!chat)chat=(Chat?.getModelsArray?.()||Chat?.models||[]).find(row=>(typeof row.id==='string'?row.id:row.id?._serialized)===chatId);
+ if(!chat)chat=(Chat?.getModelsArray?.()||Chat?.models||[]).find(row=>(typeof row.id==='string'?row.id:(row.id?._serialized||row.id?.$1))===chatId);
  if(!chat)throw new Error('COTA_HISTORY_CHAT_UNAVAILABLE');
  if(chat.endOfHistoryTransferType!==0)return false;
  await window.require('WAWebSendNonMessageDataRequest').sendPeerDataOperationRequest(3,{chatId:chat.id});return true;

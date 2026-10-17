@@ -29,10 +29,10 @@ export class WhatsAppReadSync{
  find(id){if(groupId(id)){const group=this.store.groupList().find(group=>group.id===id);return group||null;}if(!privateId(id))return null;return this.store.get("SELECT c.* FROM chats c LEFT JOIN whatsapp_chat_aliases a ON a.chat_id=c.id WHERE c.channel='whatsapp' AND c.provider='qr' AND (c.phone=? OR a.alias=?) LIMIT 1",id,id);}
  register(client,generation){
   const active=()=>this.wa.client===client&&this.wa.generation===generation&&this.wa.status==='ready';
-  client.on('unread_count',remote=>{if(!active())return;const id=remote.id?._serialized,chat=this.find(id);if(!chat)return;this.last.delete(chat.id);if(remote.unreadCount!==0)return;
+  client.on('unread_count',remote=>{if(!active())return;const id=(remote.id?._serialized||remote.id?.$1),chat=this.find(id);if(!chat)return;this.last.delete(chat.id);if(remote.unreadCount!==0)return;
    const update=()=>{if(!active())return;const anchor=this.anchor(chat);this.clearThrough(chat,anchor);this.save(chat,anchor,'sent');};if(this.wa.enqueueSideEffect)this.wa.enqueueSideEffect(chat,update).catch(()=>{});else update();
   });
-  client.on('message_ack',(message,ack)=>{if(!active()||!message?.fromMe&&!message?.id?.fromMe||!Number.isInteger(ack)||ack<0||ack>4)return;const chat=this.find(message.to),providerId=message.id?._serialized;if(!chat||typeof providerId!=='string'||!providerId||chat.channel!=='whatsapp')return;
+  client.on('message_ack',(message,ack)=>{if(!active()||!message?.fromMe&&!message?.id?.fromMe||!Number.isInteger(ack)||ack<0||ack>4)return;const chat=this.find(message.to),providerId=(message.id?._serialized||message.id?.$1);if(!chat||typeof providerId!=='string'||!providerId||chat.channel!=='whatsapp')return;
    const update=()=>{if(!active())return;const result=this.store.run("UPDATE messages SET provider_ack=MAX(COALESCE(provider_ack,0),?) WHERE provider_id=? AND chat_id=? AND direction IN ('owner','bot')",ack,providerId,chat.id);if(result.changes)this.store.changed();};if(this.wa.enqueueSideEffect)this.wa.enqueueSideEffect(chat,update).catch(()=>{});else update();
   });
  }

@@ -9,14 +9,15 @@ export function seedLiveBrowser(){
  createChat(pn);const group=createChat('12345-678@g.us');group.groupMetadata={serialize:()=>({participants:[]})};
  Chat.get=()=>undefined;Chat.find=async()=>{throw new TypeError('this.findImpl is not a function');};Chat.getModelsArray=()=>[...send.chats.values()];Msg.getModelsArray=()=>[...send.records.values()];
  collections.Contact={getModelsArray:()=>[{id:{_serialized:lid},phoneNumber:{_serialized:pn},name:'Cliente MP',isMyContact:true,isWAContact:true}]};collections.GroupMetadata={update:async()=>{throw new Error('r');}};
- state.make=({id='in-'+Math.random(),from=pn,to=own,body='cotar corr B 72',type='chat',fresh=true,age=0,fromMe=false,serializer=true}={})=>{
+ state.make=({id='in-'+Math.random(),from=pn,to=own,body='cotar corr B 72',type='chat',fresh=true,age=0,fromMe=false,serializer=true,format='serialized'}={})=>{
   const target=fromMe?to:from,row=events({id:{_serialized:id,id,remote:{_serialized:target},fromMe},from,to,type,body,t:Math.floor(Date.now()/1000)-age,isNewMsg:fresh,notifyName:'Cliente MP',ack:1});
   row.serialize=()=>{if(state.failSerialize||!serializer)throw new Error('r');return{id:{...row.id,remote:target},from,to,body:row.body,type:row.type,t:row.t,isNewMsg:row.isNewMsg,notifyName:'Cliente MP',ack:row.ack};};
+  if(format==='dollar1'){row.id.$1=row.id._serialized;delete row.id._serialized;}
   row.once=(event,fn)=>{const once=(...args)=>{row.off(event,once);fn(...args);};row.on(event,once);};return row;
  };
- state.add=options=>{const row=state.make(options),target=row.id.remote._serialized;if(!send.chats.has(target))createChat(target);send.records.set(row.id._serialized,row);if(options?.localOnly)send.chats.get(target).msgs.emit('add',row);else collections.Msg.emit('add',row);return row.id._serialized;};
+ state.add=options=>{const row=state.make(options),target=row.id.remote._serialized;if(!send.chats.has(target))createChat(target);send.records.set(row.id._serialized||row.id.$1,row);if(options?.localOnly)send.chats.get(target).msgs.emit('add',row);else collections.Msg.emit('add',row);return row.id._serialized||row.id.$1;};
  const action=sendRequire('WAWebSendMsgChatAction'),original=action.addAndSendMsgToChat;
- action.addAndSendMsgToChat=function(chat,message){const result=original.call(this,chat,message);const row=send.records.get(message.id._serialized);if(row){row.isNewMsg=true;row.t=Math.floor(Date.now()/1000);row.type=message.type||'chat';Msg.emit('add',row);}return result;};
+ action.addAndSendMsgToChat=function(chat,message){const result=original.call(this,chat,message);const row=send.records.get(message.id._serialized||message.id.$1);if(row){row.isNewMsg=true;row.t=Math.floor(Date.now()/1000);row.type=message.type||'chat';Msg.emit('add',row);}return result;};
  const extras={WAWebCollections:collections,WAWebSyncGatingUtils:{},WAWebCallCollection:{},WAWebFrontendContactGetters:{getIsMyContact:model=>model.isMyContact},WAWebStreamModel:{Stream:{markAvailable(){},markUnavailable(){}}},WAWebUpdateUnreadChatAction:{sendSeen:async({chat})=>{chat.unreadCount=0;Chat.emit('change:unreadCount',chat);}},WAWebChatLoadMessages:{loadEarlierMsgs:async()=>state.earlier.splice(0)},WAWebSendNonMessageDataRequest:{sendPeerDataOperationRequest:async()=>{state.requests++;}}};
  window.require=name=>{if(extras[name])return extras[name];try{return sendRequire(name);}catch{return authRequire(name);}};
  state.replaceMessageCollection=()=>{collections.Msg=events({get:Msg.get,getModelsArray:()=>[...send.records.values()]});};

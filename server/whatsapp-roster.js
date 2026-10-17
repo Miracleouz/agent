@@ -9,7 +9,7 @@ export function cachedRoster(kind){
  if(!Array.isArray(models))throw new Error('COTA_ROSTER_STORE_UNAVAILABLE');
  const items=[];let skipped=0;
  for(const model of models){try{
-  const id=model.id?._serialized;if(typeof id!=='string')continue;
+  const id=(model.id?._serialized||model.id?.$1);if(typeof id!=='string')continue;
   if(kind==='chats'){
    if(!/^\d+@(c\.us|lid|s\.whatsapp\.net)$/.test(id)&&!/^\d+(?:-\d+)?@g\.us$/.test(id))continue;
    // Avoid serialize()/getChatModel(): both can touch incompatible getters or group metadata.
@@ -21,7 +21,7 @@ export function cachedRoster(kind){
    let getters={},frontend={};try{getters=window.require('WAWebContactGetters')||{};}catch{}try{frontend=window.require('WAWebFrontendContactGetters')||{};}catch{}
    const saved=typeof frontend.getIsMyContact==='function'?frontend.getIsMyContact(model):model.isMyContact;
    if(saved!==true)continue;
-   const pn=model.phoneNumber?._serialized,contactId=/^\d+@(c\.us|s\.whatsapp\.net)$/.test(pn||'')?pn:id;
+   const pn=(model.phoneNumber?._serialized||model.phoneNumber?.$1),contactId=/^\d+@(c\.us|s\.whatsapp\.net)$/.test(pn||'')?pn:id;
    const isMe=typeof getters.getIsMe==='function'?getters.getIsMe(model):model.isMe;
    const isWAContact=typeof getters.getIsWAContact==='function'?getters.getIsWAContact(model):model.isWAContact;
    const name=typeof getters.getName==='function'?getters.getName(model):model.name;
@@ -41,6 +41,6 @@ export async function readCachedRoster(client,kind){
 export function cachedIdentities(ids){
  let collections;try{collections=window.require('WAWebCollections');}catch{collections=window.Store;}
  const models=collections?.Contact?.getModelsArray?.()||collections?.Contact?.models||[],pairs=[];
- for(const model of models){try{const lid=model.id?._serialized,pn=typeof model.phoneNumber==='string'?model.phoneNumber:model.phoneNumber?._serialized;if(/^\d+@lid$/.test(lid||'')&&/^\d+@(c\.us|s\.whatsapp\.net)$/.test(pn||'')&&(ids.includes(lid)||ids.includes(pn)))pairs.push({lid,pn});}catch{}}
+ for(const model of models){try{const lid=(model.id?._serialized||model.id?.$1),pn=typeof model.phoneNumber==='string'?model.phoneNumber:(model.phoneNumber?._serialized||model.phoneNumber?.$1);if(/^\d+@lid$/.test(lid||'')&&/^\d+@(c\.us|s\.whatsapp\.net)$/.test(pn||'')&&(ids.includes(lid)||ids.includes(pn)))pairs.push({lid,pn});}catch{}}
  return pairs;
 }

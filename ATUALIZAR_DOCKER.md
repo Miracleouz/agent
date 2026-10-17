@@ -1,6 +1,6 @@
-# Atualizar para a versão 1.16.1 no Docker
+# Atualizar para a versão 1.16.2 no Docker
 
-A versão 1.16.1 recupera os observadores após mudanças internas do WhatsApp e mostra as mensagens disponíveis antes de aguardar páginas antigas. Inclui diagnóstico de eventos e testes do histórico no painel e do agente ligado/desligado. A atualização reutiliza o banco e a sessão conectada. Veja [o relatório da versão](docs/CORRECAO_EVENTOS_E_HISTORICO_1_16_1.md).
+A versão 1.16.2 corrige os identificadores `$1` usados pelo WhatsApp, que impediam mensagens, histórico e confirmação dos envios. Inclui reserva exclusiva do perfil e recuperação automática dos bloqueios abandonados em perfis gerenciados. Veja [a causa e os testes](docs/CORRECAO_IDS_WHATSAPP_1_16_2.md).
 
 Use a instalação que já está funcionando. O ZIP contém o código; estoque, usuários, conversas e sessão do WhatsApp permanecem no volume existente.
 
@@ -12,7 +12,7 @@ Use a instalação que já está funcionando. O ZIP contém o código; estoque, 
 docker compose stop -t 30 cota
 ```
 
-4. Copie o conteúdo da pasta extraída (`agent-<código>` no download do GitHub ou `cota-whatsapp-1.16.1` no pacote local) para a pasta da instalação atual, substituindo os arquivos do código. O `compose.yaml`, o `Dockerfile`, `server` e `src` devem ficar diretamente na pasta atual, sem criar outra pasta dentro dela. Preserve seu `.env`, dados locais e eventuais ajustes próprios de porta, domínio ou volumes no `compose.yaml`.
+4. Copie o conteúdo da pasta extraída (`agent-<código>` no download do GitHub ou `cota-whatsapp-1.16.2` no pacote local) para a pasta da instalação atual, substituindo os arquivos do código. O `compose.yaml`, o `Dockerfile`, `server` e `src` devem ficar diretamente na pasta atual, sem criar outra pasta dentro dela. Preserve seu `.env`, dados locais e eventuais ajustes próprios de porta, domínio ou volumes no `compose.yaml`.
 5. Na mesma pasta e usando o mesmo projeto Compose da instalação anterior, execute:
 
 ```powershell
@@ -34,9 +34,9 @@ docker compose logs --tail=100 cota
 docker compose exec cota node -p "require('./package.json').version"
 ```
 
-Deve mostrar `1.16.1`.
+Deve mostrar `1.16.2`.
 
-8. Para o erro **profile_busy**, abra **WhatsApp → Recuperar conexão** após confirmar que todas as outras instâncias que usam a mesma sessão estão paradas. Marque a confirmação e clique em **Recuperar e gerar QR**. A atualização do código sozinha não remove links de bloqueio antigos; esse passo os recupera preservando os dados. Se o erro for **browser_close_timeout**, reinicie o serviço antes de tentar novamente:
+8. Perfis gerenciados pela versão 1.16.2 recuperam bloqueios antigos automaticamente. Para um bloqueio **profile_busy** herdado de versões anteriores, use **Recuperar conexão** uma vez, preservando a autenticação. Esse procedimento não precisa de **Recriar conexão**. Para o erro **profile_busy**, abra **WhatsApp → Recuperar conexão** após confirmar que todas as outras instâncias que usam a mesma sessão estão paradas. Marque a confirmação e clique em **Recuperar e gerar QR**. A atualização do código sozinha não remove links de bloqueio antigos; esse passo os recupera preservando os dados. Se o erro for **browser_close_timeout**, reinicie o serviço antes de tentar novamente:
 
 ```powershell
 docker compose restart -t 30 cota

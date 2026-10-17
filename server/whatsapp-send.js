@@ -3,7 +3,7 @@ import {randomUUID} from 'node:crypto';
 // Runs in the linked browser. Track the exact SDK send, before its final
 // collection lookup / full serializer. Never infer delivery from matching text.
 export async function prepareSendReceipt({token,chatId}){
- const chat=await window.WWebJS.getChat(chatId,{getAsModel:false}),remoteId=chat?.id?._serialized;
+ const chat=await window.WWebJS.getChat(chatId,{getAsModel:false}),remoteId=(chat?.id?._serialized||chat?.id?.$1);
  if(!/^\d+@(c\.us|lid|s\.whatsapp\.net)$/.test(remoteId||''))throw new Error('COTA_SEND_TARGET_UNAVAILABLE');
  const action=window.require('WAWebSendMsgChatAction'),key='__cotaSendReceiptV1';
  let bridge=window[key];
@@ -15,8 +15,8 @@ export async function prepareSendReceipt({token,chatId}){
    const token=message?.__cotaSendToken;
    if(!token)return original.call(this,chat,message,...args);
    delete message.__cotaSendToken;
-   const receipt=bridge.attempts.get(token),remote=value=>typeof value==='string'?value:value?._serialized;
-   const id=message.id?._serialized;
+   const receipt=bridge.attempts.get(token),remote=value=>typeof value==='string'?value:(value?._serialized||value?.$1);
+   const id=(message.id?._serialized||message.id?.$1);
    if(!receipt||receipt.state!=='prepared'||remote(chat.id)!==receipt.remoteId||remote(message.to)!==receipt.remoteId||remote(message.id?.remote)!==receipt.remoteId||message.id?.fromMe!==true||typeof id!=='string'||!id.startsWith('true_'+receipt.remoteId+'_'))throw new Error('COTA_SEND_RECEIPT_MISMATCH');
    receipt.state='started';receipt.id=id;
    const result=original.call(this,chat,message,...args);
@@ -54,12 +54,12 @@ export async function sendConfirmed(wa,chat,content,options={}){
  catch(cause){error=cause;}
  finally{if(browser)receipt=await client.pupPage.evaluate(consumeSendReceipt,{token}).catch(()=>null);}
  const recovered=receipt?.state==='accepted'&&receipt.chatId===chat.phone&&/^\d+@(c\.us|lid|s\.whatsapp\.net)$/.test(receipt.remoteId||'')&&typeof receipt.id==='string'&&receipt.id.startsWith('true_'+receipt.remoteId+'_');
- const id=browser?(recovered?receipt.id:null):result?.id?._serialized;
+ const id=browser?(recovered?receipt.id:null):(result?.id?._serialized||result?.id?.$1);
  if(typeof id!=='string'||!id){
   wa.logger.error('[WhatsApp send] unconfirmed');
   throw Object.assign(new Error('Envio não confirmado. Confira no WhatsApp antes de reenviar; a mensagem pode já ter sido enviada.'),{uncertain:true,cause:error});
  }
- if(!result?.id?._serialized&&recovered)wa.logger.error('[WhatsApp send] receipt_recovered');
+ if(!(result?.id?._serialized||result?.id?.$1)&&recovered)wa.logger.error('[WhatsApp send] receipt_recovered');
  // Reading is a separate operation: its failure cannot undo an accepted send.
  if(wa.client===client&&wa.status==='ready')try{await wa.markRead(chat);}catch{wa.logger.error('[WhatsApp read] failed_after_send');}
  return id;

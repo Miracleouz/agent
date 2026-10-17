@@ -29,11 +29,11 @@ test('a continuous import cannot starve push updates and contact history display
 });
 test('sync button imports browser history into the panel and active bot answers while disabled bot stays silent',async({page})=>{
  const f=await fixture();try{
-  await f.page.evaluate(()=>{for(const[age,id,body]of[[29*86400,'provider-day29','Histórico real da coleção de 29 dias'],[31*86400,'provider-day31','Mensagem de 31 dias fora da janela']]){const row=window.liveFixture.make({id,age,body,fresh:false});window.sendFixture.records.set(id,row);}});await login(page,f);
+  await f.page.evaluate(()=>{for(const[age,id,body]of[[29*86400,'provider-day29','Histórico real da coleção de 29 dias'],[31*86400,'provider-day31','Mensagem de 31 dias fora da janela']]){const row=window.liveFixture.make({id,age,body,fresh:false,format:'dollar1'});window.sendFixture.records.set(id,row);}window.sendFixture.modernKeys=true;});await login(page,f);
   await page.getByRole('button',{name:'WhatsApp',exact:true}).click();await page.getByRole('button',{name:'Sincronizar WhatsApp',exact:true}).click();await expect.poll(()=>f.store.get("SELECT count(*) n FROM messages WHERE provider_id='provider-day29'").n).toBe(1);expect(await f.sent()).toHaveLength(0);
   await page.getByRole('button',{name:'Ver diagnóstico de mensagens',exact:true}).click();await expect(page.locator('.sync-diagnostics pre')).toContainText('"attached": true');await page.getByRole('button',{name:'Conversas',exact:true}).click();await page.getByRole('tab',{name:/Histórico/}).click();await page.locator('.chat-item').click();await expect(page.locator('.message-body')).toContainText(['Histórico real da coleção de 29 dias']);await expect(page.getByText('Mensagem de 31 dias fora da janela',{exact:true})).toHaveCount(0);
   // Opening claims the chat in manual mode. Release it with the agent enabled.
-  await page.getByRole('button',{name:'Reativar agente',exact:true}).click();await f.add({id:'ui-enabled-bot',body:'cotar B72'});await expect(page.locator('.message-body')).toContainText(['R$'],{timeout:3000});expect(await f.sent()).toHaveLength(1);
-  f.store.setSettings({agentEnabled:false});await f.add({id:'ui-disabled-bot',body:'preço correia A89'});await expect(page.locator('.message-body').last()).toHaveText('preço correia A89',{timeout:3000});expect(await f.sent()).toHaveLength(1);
+  await page.getByRole('button',{name:'Reativar agente',exact:true}).click();await f.add({id:'ui-enabled-bot',body:'cotar B72',format:'dollar1'});await expect(page.locator('.message-body')).toContainText(['R$'],{timeout:3000});expect(await f.sent()).toHaveLength(1);
+  f.store.setSettings({agentEnabled:false});await f.add({id:'ui-disabled-bot',body:'preço correia A89',format:'dollar1'});await expect(page.locator('.message-body').last()).toHaveText('preço correia A89',{timeout:3000});expect(await f.sent()).toHaveLength(1);
  }finally{await page.goto('about:blank').catch(()=>{});await f.close();}
 });

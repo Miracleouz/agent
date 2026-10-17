@@ -13,6 +13,7 @@ import {WhatsAppAvatars} from './whatsapp-avatars.js';
 import {sendConfirmed} from './whatsapp-send.js';
 import {WhatsAppClient} from './whatsapp-client.js';
 import {connectionStageLabel} from './connection-progress.js';
+import {acquireProfileLease,prepareManagedProfile,markManagedProfile} from './whatsapp-profile-lease.js';
 import {recoverProfile,recreateProfile,profileRecoveryError} from './whatsapp-profile.js';
 const {LocalAuth,MessageMedia}=wa;
 function bounded(operation,timeout,code){return new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error(code)),timeout);Promise.resolve().then(operation).then(value=>{clearTimeout(timer);resolve(value);},()=>{clearTimeout(timer);reject(new Error(code));});});}
@@ -52,6 +53,7 @@ export class WhatsApp {
   let client;try{client=this.clientFactory({authStrategy:new LocalAuth({dataPath:join(this.dataDir,'whatsapp')}),authTimeoutMs:authenticationTimeout(process.env.WHATSAPP_AUTH_TIMEOUT_MS),puppeteer:{headless:true,executablePath,args},...(proxyAuthentication?{proxyAuthentication}:{}),webVersionCache:{type:'none'}});}catch(error){this.connectionFailed(error);return this.snapshot();}
   let readyAt=null;
   this.client=client;
+  if(client.cotaManaged&&client.authStrategy instanceof LocalAuth){try{this.profileLease??=await acquireProfileLease(this.dataDir);const repair=await prepareManagedProfile(this.dataDir,{lease:this.profileLease});if(repair?.removed?.length)this.logger.info?.('[WhatsApp profile] stale_locks_recovered');}catch(error){this.connectionFailed(error);return this.snapshot();}if(this.generation!==generation){await this.profileLease?.release();this.profileLease=null;return this.snapshot();}}
   this.progress('browser_start');this.armStartup(client,generation);
   this.readSync.register(client,generation);
   client.on('cota_stage',stage=>{if(this.generation===generation&&this.client===client&&this.status!=='error')this.progress(stage);});
@@ -65,11 +67,15 @@ export class WhatsApp {
   const received=message=>{
    if(this.generation!==generation||this.client!==client||this.status!=='ready'||readyAt===null)return;
    this.monitor.received();
+   if(!message.id?._serialized&&typeof message.id?.$1==='string')message.id={...message.id,_serialized:message.id.$1};
    const group=/^\d+(?:-\d+)?@g\.us$/.test(message.from);
    if(message.fromMe||message.id?.fromMe||message.isStatus||!group&&!/^\d+@(c\.us|lid|s\.whatsapp\.net)$/.test(message.from)){this.monitor.reject('destination_or_own');return;}
-   if(message.from===client.info?.wid?._serialized||message.from===client.info?.lid?._serialized)return;
+   if(message.from===(client.info?.wid?._serialized||client.info?.wid?.$1)||message.from===(client.info?.lid?._serialized||client.info?.lid?.$1))return;
    // Reconnection can replay history. Only accept new, identifiable customer messages.
-   if(!message.id?._serialized||!Number.isFinite(message.timestamp)||message.timestamp<readyAt||message._data?.isNewMsg===false){this.monitor.reject('history_or_timestamp');return;}
+   if(!message.id?._serialized){this.monitor.reject('identifier');return;}
+   if(!Number.isFinite(message.timestamp)){this.monitor.reject('invalid_timestamp');return;}
+   if(message.timestamp<readyAt){this.monitor.reject('before_connection');return;}
+   if(message._data?.isNewMsg===false){this.monitor.reject('history_event');return;}
    const text=['chat','buttons_response','list_response','template_button_reply'].includes(message.type);
    const attachment=['audio','ptt','image','album','video','document','sticker','location','vcard','multi_vcard','order','product','groups_v4_invite','poll_creation'].includes(message.type);
    // Internal events, including encryption and call notifications, are not customer requests.
@@ -107,11 +113,11 @@ export class WhatsApp {
  mirrorOutgoing(message,client=this.client,generation=this.generation){
   const active=()=>this.client===client&&this.generation===generation&&this.status==='ready';
   if(!active()||message?.cotaOrigin||message?.fromMe!==true&&message?.id?.fromMe!==true||message.isStatus||message._data?.isNewMsg===false||!Number.isFinite(message.timestamp)||message.timestamp<this.readyAt)return;
-  const phone=message.to,providerId=message.id?._serialized;
+  const phone=message.to,providerId=message.id?._serialized||message.id?.$1;
   if(!['chat','image','audio','ptt','video','document','sticker','location','vcard','multi_vcard'].includes(message.type))return;
   if(/^\d+(?:-\d+)?@g\.us$/.test(phone||'')&&providerId){const body=String(message.body||'[Anexo enviado pelo WhatsApp]').trim();this.store.addGroupMessage({id:phone,providerId,author:'Enviado pelo WhatsApp',body,created:message.timestamp*1000,incoming:false});return;}
   if(!/^\d+@(c\.us|lid|s\.whatsapp\.net)$/.test(phone||'')||!providerId||![ 'chat','image','audio','ptt','video','document','sticker','location','vcard','multi_vcard'].includes(message.type))return;
-  if([client.info?.wid?._serialized,client.info?.lid?._serialized].includes(phone))return;
+  if([(client.info?.wid?._serialized||client.info?.wid?.$1),(client.info?.lid?._serialized||client.info?.lid?.$1)].includes(phone))return;
   let chat=this.readSync.find(phone);
   if(!chat){const id=randomUUID();this.store.run("INSERT INTO chats(id,phone,name,channel,provider,updated,last_inbound,unread) VALUES(?,?,?,'whatsapp','qr',?,0,0)",id,phone,phone.split('@')[0],Date.now());chat=this.store.chat(id);this.store.run('INSERT OR IGNORE INTO whatsapp_chat_aliases VALUES(?,?)',phone,id);}
   const update=()=>{if(!active()||this.store.get('SELECT id FROM messages WHERE provider_id=?',providerId))return;
@@ -135,14 +141,14 @@ export class WhatsApp {
  }
  async resolveContact(phone){
   if(this.status!=='ready'||!this.client)throw Object.assign(new Error('Conecte o WhatsApp antes de iniciar uma conversa.'),{status:409});
-  const client=this.client,generation=this.generation,id=(await client.getNumberId(phone))?._serialized;
+  const client=this.client,generation=this.generation,identity=await client.getNumberId(phone),id=identity?._serialized||identity?.$1;
   if(!id)throw Object.assign(new Error('Este telefone não foi encontrado no WhatsApp.'),{status:422});
   if(!/^\d+@(c\.us|lid|s\.whatsapp\.net)$/.test(id))throw Object.assign(new Error('Não foi possível confirmar o número do WhatsApp.'),{status:422});
   const identities=await client.getContactLidAndPhone([id]);
   if(this.client!==client||this.generation!==generation||this.status!=='ready')throw Object.assign(new Error('O WhatsApp desconectou. Tente novamente depois de conectar.'),{status:409});
   const aliases=[...new Set([id,...identities.filter(item=>item.pn===id||item.lid===id).flatMap(item=>[item.pn,item.lid]).filter(Boolean)])];
   for(const alias of [...aliases])if(/^\d+@(c\.us|s\.whatsapp\.net)$/.test(alias)){const number=alias.split('@')[0];for(const suffix of ['c.us','s.whatsapp.net'])if(!aliases.includes(number+'@'+suffix))aliases.push(number+'@'+suffix);}
-  if(aliases.includes(client.info?.wid?._serialized)||aliases.includes(client.info?.lid?._serialized))throw Object.assign(new Error('Escolha o WhatsApp de um cliente, diferente do número da loja.'),{status:400});
+  if(aliases.includes((client.info?.wid?._serialized||client.info?.wid?.$1))||aliases.includes((client.info?.lid?._serialized||client.info?.lid?.$1)))throw Object.assign(new Error('Escolha o WhatsApp de um cliente, diferente do número da loja.'),{status:400});
   return{id,aliases};
  }
  async sendPhoto(chat,photo,caption){
@@ -179,7 +185,7 @@ export class WhatsApp {
     await closeClient(client,this.cleanupTimeout);if(this.client===client)this.client=null;
    }
    if(logoutError)throw logoutError;
-   this.stage=null;this.update('disconnected');return this.snapshot();
+   await this.profileLease?.release();this.profileLease=null;this.stage=null;this.update('disconnected');return this.snapshot();
   }catch(error){this.connectionFailed(error);throw Object.assign(new Error(this.error),{status:503});}
  }
  recover({allOtherInstancesStopped=false,recreate=false}={}){
@@ -194,10 +200,12 @@ export class WhatsApp {
   try{
    await this.connecting?.catch(()=>{});
    if(this.client){await closeClient(this.client,this.cleanupTimeout);this.client=null;}
+   this.profileLease??=await acquireProfileLease(this.dataDir);
    if(recreate){await recreateProfile(this.dataDir,{offlineConfirmed:true});this.store.event('whatsapp','Conexão recriada. O perfil anterior foi guardado no servidor; leia um novo QR Code.');}
    else await recoverProfile(this.dataDir,{clear:true,offlineConfirmed:true});
+   if(this.profileLease)await markManagedProfile(this.dataDir);
    this.stage=null;this.update('disconnected');return await this.startConnection();
   }catch(error){const failure=error.message==='COTA_BROWSER_CLOSE_TIMEOUT'?error:profileRecoveryError(error);this.logger.error(`[WhatsApp profile] stage=${failure.stage||'browser_close'} code=${failure.code||'COTA_BROWSER_CLOSE_TIMEOUT'}${failure.fsCode?' fs='+failure.fsCode:''}`);this.connectionFailed(failure);throw Object.assign(new Error(this.error),{status:409});}
  }
- async close(){this.monitor.reset();++this.generation;this.clearStartup();this.syncer.reset();this.readSync.reset();this.avatars.reset();await this.connecting?.catch(()=>{});await this.disconnecting?.catch(()=>{});await this.recovering?.catch(()=>{});++this.generation;this.clearStartup();if(this.client)await closeClient(this.client,this.cleanupTimeout).catch(()=>{});}
+ async close(){this.monitor.reset();++this.generation;this.clearStartup();this.syncer.reset();this.readSync.reset();this.avatars.reset();await this.connecting?.catch(()=>{});await this.disconnecting?.catch(()=>{});await this.recovering?.catch(()=>{});++this.generation;this.clearStartup();if(this.client)await closeClient(this.client,this.cleanupTimeout).catch(()=>{});await this.profileLease?.release();this.profileLease=null;}
 }
