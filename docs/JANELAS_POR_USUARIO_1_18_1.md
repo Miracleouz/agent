@@ -32,7 +32,7 @@ O WhatsApp precisa disponibilizar os dados e os arquivos à sessão vinculada. Q
 
 ## Fotos, vídeos e áudios
 
-O download pode usar a mensagem nativa ou localizar o identificador exato na coleção vinculada, conferindo a conversa e seus aliases antes de baixar. Não depende exclusivamente do serializador completo do SDK. Downloads simultâneos do mesmo arquivo são compartilhados. Uma falha ao obter um arquivo é diferenciada de WhatsApp desconectado.
+O download pode usar a mensagem nativa ou localizar o identificador exato na coleção vinculada, conferindo a conversa e seus aliases antes de baixar. Não depende exclusivamente do serializador completo do SDK. Downloads simultâneos do mesmo arquivo são compartilhados. Uma falha ao obter um arquivo é diferenciada de WhatsApp desconectado. Um download atrasado preserva qualquer legenda editada enquanto o arquivo carregava.
 
 **Transcrever áudio** aparece mesmo antes de baixar o áudio. O clique carrega o arquivo e solicita a transcrição. A transcrição feita pelo atendente fica no histórico e não envia respostas do bot.
 
@@ -44,7 +44,7 @@ Com `BOT_AUDIO_ENABLED=true` (padrão no Compose), áudios novos de clientes e �
 
 O bot atende cotações de correias e mantém a saudação do ROBINHO, o fechamento de pedido, a retirada e o encaminhamento ao atendente. Mensagens fora desse assunto ficam sem resposta automática. A transcrição não confirma uma compra nem desconta estoque.
 
-Antes de responder, verifica novamente o modo do chat, o responsável, a ativação global, a exclusão da mensagem e se existe uma entrada mais recente. Transferir, assumir ou ler o chat enquanto o áudio está em processamento impede uma resposta atrasada. Duplicatas e repetição da transcrição não geram duas respostas. Reiniciar não reprocessa os áudios pendentes automaticamente.
+Antes de responder, verifica novamente o modo do chat, o responsável, a ativação global, a exclusão da mensagem e se existe uma entrada mais recente. Transferir, assumir ou ler o chat enquanto o áudio está em processamento impede uma resposta atrasada. Importar mensagens antigas durante a transcrição não faz o áudio novo deixar de ser considerado a última entrada válida. Duplicatas e repetição da transcrição não geram duas respostas. Reiniciar não reprocessa os áudios pendentes automaticamente.
 
 Se o modelo de voz não estiver disponível ou a fala não puder ser reconhecida, o painel registra a falha e sinaliza atendimento humano; não inventa uma cotação nem envia mensagens repetidas. Confira medidas e referências reconhecidas no áudio original.
 
@@ -60,9 +60,9 @@ Os testes usam bancos descartáveis, SDK instalado, modelos controlados do Whats
 
 ### Resultados desta entrega
 
-- **4.151 testes de servidor:** regressão de 4.149 casos e dois testes adicionais de mídia com Chromium/SDK. Os 51 cenários novos de revisão cobrem não lidas, leitura antes do processamento, repetição de sincronização, envio incerto, identificação PN/LID, paginação até 30 dias, reativação, assunto da conversa, referências faladas e áudio durante transferência, exclusão ou leitura.
+- **4.154 testes de servidor aprovados** na regressão completa, incluindo mídia com Chromium/SDK. Os 52 cenários novos de revisão cobrem não lidas, leitura antes do processamento, repetição de sincronização, envio incerto, identificação PN/LID, paginação até 30 dias, reativação, assunto da conversa, referências faladas e áudio durante transferência, exclusão ou leitura.
 - **78 testes de interface aprovados**, incluindo agenda móvel, janelas por usuário, relógios, transcrição antes do download e reativação de chat encerrado.
-- **693 testes aprovados dentro da imagem Docker**, com código/dependências de produção, usuário `node`, `init`, Chromium e rede externa desligada. São repetições de cenários na imagem, não 693 conversas com clientes reais.
+- **696 testes aprovados dentro da imagem Docker**, com código/dependências de produção, usuário `node`, `init`, Chromium e rede externa desligada. São repetições de cenários na imagem, não 696 conversas com clientes reais.
 - Build de produção e verificação HTTP da imagem, versão e bundle do painel.
 
 A preparação de fotos percorre o código real do SDK nos testes, com os módulos de upload controlados. Os downloads conferem o identificador e a conversa, com conversão de bytes no Chromium. A voz usa transcrições controladas, pois o modelo não pôde ser baixado. Esses resultados não substituem a conferência de uma mensagem, foto e áudio com o número realmente vinculado à sua instalação.

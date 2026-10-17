@@ -136,7 +136,7 @@ export class Agent {
  finishAudio(id){
   const row=this.store.get('SELECT * FROM messages WHERE id=?',id);if(!row)return Promise.resolve({ignored:true});const chat=this.store.chat(row.chat_id);if(!chat)return Promise.resolve({ignored:true});
   return this.enqueue(`${chat.provider||'qr'}:${chat.channel}:${chat.phone}`,async()=>{
-   const live=this.store.chat(chat.id),message=this.store.get('SELECT * FROM messages WHERE id=?',id),latest=this.store.get("SELECT id FROM messages WHERE chat_id=? AND direction='in' ORDER BY rowid DESC LIMIT 1",chat.id);
+   const live=this.store.chat(chat.id),message=this.store.get('SELECT * FROM messages WHERE id=?',id),latest=this.store.get("SELECT id FROM messages WHERE chat_id=? AND direction='in' AND inbound_verified=1 ORDER BY rowid DESC LIMIT 1",chat.id);
    if(message?.audio_agent_state!=='pending')return{ignored:true};
    const eligible=!message.deleted_at&&message.inbound_verified===1&&live.mode==='auto'&&live.routing_version===message.audio_routing_version&&this.store.settings().agentEnabled&&latest?.id===id&&!(live.closed_at>message.created);
    this.store.run('UPDATE messages SET audio_agent_state=? WHERE id=?',eligible?'interpreted':'skipped',id);this.store.changed();if(!eligible)return{ignored:true};
