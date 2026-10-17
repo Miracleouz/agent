@@ -8,6 +8,8 @@ Novidades da **1.17.0**: [compra com baixa por medida, mídia, transcrição, re
 
 Novidades da **1.17.1**: [Admin modera mensagens enviadas pela loja; Comercial edita e apaga as próprias](docs/EDITAR_E_APAGAR_1_17_1.md).
 
+Novidades da **1.17.2**: [colar prints com Ctrl+V e transferir conversa sem liberação prévia pelo usuário](docs/CTRL_V_E_TRANSFERENCIA_1_17_2.md).
+
 ## O que está implementado
 
 - Contas individuais com dois cargos: **Admin** e **Comercial**. O Admin cadastra, edita cargos, redefine senhas e desativa contas em **Equipe**. Pode haver vários administradores; o sistema impede desativar ou rebaixar o último Admin ativo. Senhas com scrypt, sessões em cookie HttpOnly, proteção de origem e limitação de tentativas de login. Cada usuário pode trocar sua senha, encerrando somente suas outras sessões. Mudança de cargo exige novo login; desativação revoga o acesso e libera os chats, mantendo o agente pausado.
