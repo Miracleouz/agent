@@ -15,6 +15,8 @@ const tick=()=>new Promise(resolve=>setImmediate(resolve));
 function fixture(t,{timeout=2000}={}){
  const context=createContext({window:{},Uint8Array});runInContext('('+seedAuthBrowser.toString()+')()',context);const state=context.window.authFixture,main={url:()=> 'https://web.whatsapp.com/'};
  class Page extends EventEmitter{
+  async setBypassServiceWorker(){}
+  async setCacheEnabled(){}
   mainFrame(){return main;}
   async evaluate(fn,...args){state.evaluations++;if(this.error){const error=this.error;this.error=null;throw error;}context.args=args;return await runInContext(typeof fn==='string'?fn:'('+fn.toString()+')(...args)',context);}
   async exposeFunction(name,fn){state.registrations++;context.window[name]=fn;}

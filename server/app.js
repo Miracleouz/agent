@@ -140,6 +140,7 @@ export function createApp({store,whatsapp,production=false,appUrl=process.env.AP
  app.post('/api/whatsapp/sync',adminOnly,(req,res)=>{z.object({}).strict().parse(req.body||{});if(whatsapp.snapshot().status!=='ready')throw fail('Aguarde o WhatsApp ficar Conectado antes de sincronizar.',409);whatsapp.sync().catch(()=>{});res.status(202).json({ok:true});});
  app.post('/api/whatsapp/disconnect',adminOnly,async(_req,res)=>{await whatsapp.disconnect();res.json(whatsapp.snapshot());});
  app.post('/api/whatsapp/recover',adminOnly,async(req,res)=>res.json(await whatsapp.recover(z.object({allOtherInstancesStopped:z.literal(true)}).strict().parse(req.body||{}))));
+ app.post('/api/whatsapp/recreate',adminOnly,async(req,res)=>{const input=z.object({allOtherInstancesStopped:z.literal(true)}).strict().parse(req.body||{});res.json(await whatsapp.recover({...input,recreate:true}));});
  app.use('/api',(_req,res)=>res.status(404).json({error:'Rota não encontrada.'}));
  app.use((err,_req,res,next)=>{
   if(res.headersSent)return next(err);

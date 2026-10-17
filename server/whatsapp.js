@@ -10,7 +10,7 @@ import {WhatsAppAvatars} from './whatsapp-avatars.js';
 import {sendConfirmed} from './whatsapp-send.js';
 import {WhatsAppClient} from './whatsapp-client.js';
 import {connectionStageLabel} from './connection-progress.js';
-import {recoverProfile,profileRecoveryError} from './whatsapp-profile.js';
+import {recoverProfile,recreateProfile,profileRecoveryError} from './whatsapp-profile.js';
 const {LocalAuth,MessageMedia}=wa;
 function bounded(operation,timeout,code){return new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error(code)),timeout);Promise.resolve().then(operation).then(value=>{clearTimeout(timer);resolve(value);},()=>{clearTimeout(timer);reject(new Error(code));});});}
 const closures=new WeakMap();
@@ -148,19 +148,20 @@ export class WhatsApp {
    this.stage=null;this.update('disconnected');return this.snapshot();
   }catch(error){this.connectionFailed(error);throw Object.assign(new Error(this.error),{status:503});}
  }
- recover({allOtherInstancesStopped=false}={}){
+ recover({allOtherInstancesStopped=false,recreate=false}={}){
   if(allOtherInstancesStopped!==true)return Promise.reject(Object.assign(new Error('Confirme que todas as outras instâncias que usam esta sessão estão paradas.'),{status:400}));
   if(this.recovering)return this.recovering;
   if(this.logoutWork)return Promise.reject(Object.assign(new Error('Aguarde a desvinculação pendente ou reinicie o serviço antes de recuperar.'),{status:503}));
   if(this.disconnecting||['starting','qr','authenticated','ready'].includes(this.status))return Promise.reject(Object.assign(new Error('Desconecte esta tentativa antes de recuperar a conexão.'),{status:409}));
   ++this.generation;this.qr=null;this.number=null;this.progress('profile_recovery');this.update('recovering');
-  const task=this.recoverConnection();this.recovering=task;task.then(()=>{if(this.recovering===task)this.recovering=null;},()=>{if(this.recovering===task)this.recovering=null;});return task;
+  const task=this.recoverConnection(recreate);this.recovering=task;task.then(()=>{if(this.recovering===task)this.recovering=null;},()=>{if(this.recovering===task)this.recovering=null;});return task;
  }
- async recoverConnection(){
+ async recoverConnection(recreate=false){
   try{
    await this.connecting?.catch(()=>{});
    if(this.client){await closeClient(this.client,this.cleanupTimeout);this.client=null;}
-   await recoverProfile(this.dataDir,{clear:true,offlineConfirmed:true});
+   if(recreate){await recreateProfile(this.dataDir,{offlineConfirmed:true});this.store.event('whatsapp','Conexão recriada. O perfil anterior foi guardado no servidor; leia um novo QR Code.');}
+   else await recoverProfile(this.dataDir,{clear:true,offlineConfirmed:true});
    this.stage=null;this.update('disconnected');return await this.startConnection();
   }catch(error){const failure=error.message==='COTA_BROWSER_CLOSE_TIMEOUT'?error:profileRecoveryError(error);this.logger.error(`[WhatsApp profile] stage=${failure.stage||'browser_close'} code=${failure.code||'COTA_BROWSER_CLOSE_TIMEOUT'}${failure.fsCode?' fs='+failure.fsCode:''}`);this.connectionFailed(failure);throw Object.assign(new Error(this.error),{status:409});}
  }

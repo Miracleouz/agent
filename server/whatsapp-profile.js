@@ -1,4 +1,5 @@
-import {lstat,readdir,readFile,realpath,unlink} from 'node:fs/promises';
+import {lstat,readdir,readFile,realpath,unlink,rename,mkdir} from 'node:fs/promises';
+import {randomUUID} from 'node:crypto';
 import {basename,join,resolve} from 'node:path';
 
 export const profileLocks=['SingletonLock','SingletonCookie','SingletonSocket'];
@@ -69,5 +70,26 @@ export async function recoverProfile(dataDir,{clear=false,offlineConfirmed=false
   stage='lock_remove';const removed=[];
   for(const {name} of found){await unlink(join(profile,name));removed.push(name);}
   return{state:'clean',locks,removed};
+ }catch(error){throw profileRecoveryError(error,stage);}
+}
+// Explicit replacement only. Keep the old authentication in a private sibling
+// directory; never delete it or open the application's database during repair.
+export async function recreateProfile(dataDir,{offlineConfirmed=false,processCheck=visibleProfileUsers}={}){
+ let stage='profile_path';
+ try{
+  const result=await recoverProfile(dataDir,{clear:true,offlineConfirmed,processCheck});
+  if(result.state==='absent')return{backup:null};
+  const root=await realpath(resolve(dataDir)),profile=join(root,'whatsapp','session');
+  const before=await stat(profile);
+  stage='process_scan';
+  if(await processCheck(profile))throw profileFailure('ACTIVE','Existe um processo usando o perfil. A recriação foi interrompida.',stage);
+  stage='profile_backup';
+  const current=await stat(profile);
+  if(!before||!current?.isDirectory()||current.isSymbolicLink()||before.dev!==current.dev||before.ino!==current.ino)throw profileFailure('CHANGED','O perfil mudou durante a verificação. A recriação foi interrompida.',stage);
+  const backup='session-backup-'+randomUUID(),target=join(root,'whatsapp',backup);
+  await rename(profile,target);
+  try{await mkdir(profile,{mode:0o700});}
+  catch(error){await rename(target,profile);throw error;}
+  return{backup};
  }catch(error){throw profileRecoveryError(error,stage);}
 }

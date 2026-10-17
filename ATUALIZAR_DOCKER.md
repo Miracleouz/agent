@@ -1,6 +1,6 @@
-# Atualizar para a versão 1.15.6 no Docker
+# Atualizar para a versão 1.15.7 no Docker
 
-A versão 1.15.6 corrige a recusa da recuperação em Docker com `init: true`: o `docker-init` era confundido com outra instância do Cota. A correção foi validada em Docker com usuário `node`, incluindo os cliques do painel e recriação com o mesmo volume. Veja [RECUPERACAO_DOCKER_INIT.md](docs/RECUPERACAO_DOCKER_INIT.md). A confirmação real de desconexão, o limite e o progresso de carregamento continuam ativos.
+A versão 1.15.7 abre o WhatsApp sem reutilizar o cache HTTP ou o service worker do perfil salvo. Inclui **Recriar conexão** para o caso em que o diagnóstico temporário gera QR, mas o perfil salvo não inicia: o perfil anterior fica guardado no servidor e o estoque, os usuários e o histórico do painel são preservados. Veja [PERFIL_SALVO_E_NOVO_QR.md](docs/PERFIL_SALVO_E_NOVO_QR.md).
 
 Use a instalação que já está funcionando. O ZIP contém o código; estoque, usuários, conversas e sessão do WhatsApp permanecem no volume existente.
 
@@ -12,7 +12,7 @@ Use a instalação que já está funcionando. O ZIP contém o código; estoque, 
 docker compose stop -t 30 cota
 ```
 
-4. Copie o conteúdo da pasta extraída (`agent-<código>` no download do GitHub ou `cota-whatsapp-1.15.6` no pacote local) para a pasta da instalação atual, substituindo os arquivos do código. O `compose.yaml`, o `Dockerfile`, `server` e `src` devem ficar diretamente na pasta atual, sem criar outra pasta dentro dela. Preserve seu `.env`, dados locais e eventuais ajustes próprios de porta, domínio ou volumes no `compose.yaml`.
+4. Copie o conteúdo da pasta extraída (`agent-<código>` no download do GitHub ou `cota-whatsapp-1.15.7` no pacote local) para a pasta da instalação atual, substituindo os arquivos do código. O `compose.yaml`, o `Dockerfile`, `server` e `src` devem ficar diretamente na pasta atual, sem criar outra pasta dentro dela. Preserve seu `.env`, dados locais e eventuais ajustes próprios de porta, domínio ou volumes no `compose.yaml`.
 5. Na mesma pasta e usando o mesmo projeto Compose da instalação anterior, execute:
 
 ```powershell
@@ -34,7 +34,7 @@ docker compose logs --tail=100 cota
 docker compose exec cota node -p "require('./package.json').version"
 ```
 
-Deve mostrar `1.15.6`.
+Deve mostrar `1.15.7`.
 
 8. Para o erro **profile_busy**, abra **WhatsApp → Recuperar conexão** após confirmar que todas as outras instâncias que usam a mesma sessão estão paradas. Marque a confirmação e clique em **Recuperar e gerar QR**. A atualização do código sozinha não remove links de bloqueio antigos; esse passo os recupera preservando os dados. Se o erro for **browser_close_timeout**, reinicie o serviço antes de tentar novamente:
 
@@ -42,7 +42,9 @@ Deve mostrar `1.15.6`.
 docker compose restart -t 30 cota
 ```
 
-9. Abra o endereço que você já usa para acessar o painel e pressione **Ctrl+F5**. Na instalação local padrão, o endereço digitado no navegador é `localhost:3000`. Assuma um chat de teste com outro número e envie uma mensagem manual. Confira a mensagem no WhatsApp e o check no Cota. Se houver perda de confirmação sem prova suficiente, o painel mostrará **Envio não confirmado**, com orientação para conferir no WhatsApp antes de reenviar. Não há reenvio automático. As marcações antigas já gravadas não são alteradas sem confirmação.
+9. Se o diagnóstico termina em **OK**, mas o painel mostra **connection_timeout** ou **auth_modules**, clique em **Recriar conexão**. Confira a explicação, confirme que outras instâncias estão paradas e clique em **Recriar e gerar QR**. Esse comando prepara um perfil novo e guarda o anterior; será necessário ler o novo QR.
+
+10. Abra o endereço que você já usa para acessar o painel e pressione **Ctrl+F5**. Na instalação local padrão, o endereço digitado no navegador é `localhost:3000`. Assuma um chat de teste com outro número e envie uma mensagem manual. Confira a mensagem no WhatsApp e o check no Cota. Se houver perda de confirmação sem prova suficiente, o painel mostrará **Envio não confirmado**, com orientação para conferir no WhatsApp antes de reenviar. Não há reenvio automático. As marcações antigas já gravadas não são alteradas sem confirmação.
 
 Com o WhatsApp desconectado, suas conversas, contatos e histórico ficam ocultos, com os dados preservados no volume. Ao reconectar, voltam a aparecer conforme o cargo e o responsável. As simulações seguem disponíveis.
 
@@ -60,6 +62,6 @@ Nesta versão, o atendimento automático envia um único aviso e encerra após c
 
 Não execute `docker compose down -v` nem exclua o volume `cota-data`. O nome real do volume costuma incluir o nome do projeto Compose. Mantenha a mesma instalação/projeto para preservar estoque, acessos, histórico e sessão. Caso a sessão de WhatsApp tenha expirado, gere um novo QR no painel.
 
-O pacote foi verificado com 3.361 testes automatizados, 48 testes de navegador e build de produção. A imagem também foi construída e passou 18 verificações de integração em Docker com init, usuário node e volume persistente, usando módulos de WhatsApp simulados e sem parear número. Construa a imagem na sua instalação pelo comando acima.
+Os resultados dos testes desta versão estão em [PERFIL_SALVO_E_NOVO_QR.md](docs/PERFIL_SALVO_E_NOVO_QR.md). Construa a imagem na sua instalação pelo comando acima.
 
 Se a recuperação pelo painel não concluir, há um [procedimento de recuperação offline pelo Docker](docs/RECUPERACAO_FORA_DO_PAINEL.md) para a instalação padrão. Ele usa a imagem e o volume exatos do contêiner existente e verifica se outros contêineres ainda usam esse volume, sem exigir outra atualização do aplicativo.

@@ -68,6 +68,10 @@ export class WhatsAppClient extends wa.Client{
   };
  }
  async initWebVersionCache(){
+  // LocalAuth preserves Chromium's own HTTP cache and service workers too.
+  // Bypass those for this page without clearing cookies or IndexedDB keys.
+  await this.pupPage.setBypassServiceWorker(true);
+  await this.pupPage.setCacheEnabled(false);
   // The SDK still attaches an async HTML-capture listener for cache='none'.
   // Its response.text() can reject while closing a failed page. No capture is
   // needed when cached HTML is disabled, so do not install that listener.

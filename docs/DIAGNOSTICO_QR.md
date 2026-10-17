@@ -30,6 +30,8 @@ Esse comando usa um banco em memória e um perfil temporário, com limite de 120
 
 Se o diagnóstico temporário funcionar e o painel continuar falhando, confira o código de erro do painel: o perfil persistente ou a instância do serviço pode exigir análise. O teste temporário não tenta consertar ou limpar o perfil salvo.
 
+Na versão **1.15.7**, o carregamento ignora também o cache HTTP e o service worker do perfil salvo. Para um perfil que continua falhando apesar do diagnóstico **OK**, use **Recriar conexão**: o perfil anterior é guardado no servidor e um perfil novo é preparado para ler outro QR, mantendo estoque, usuários e histórico do painel. Veja [PERFIL_SALVO_E_NOVO_QR.md](PERFIL_SALVO_E_NOVO_QR.md).
+
 ## Categorias
 
 | Código | O que conferir |

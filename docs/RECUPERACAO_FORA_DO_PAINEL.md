@@ -12,13 +12,18 @@ Cole o bloco inteiro no PowerShell, na pasta da instalação atual:
     $cotaIds = @(docker compose ps --all --quiet cota)
     if ($LASTEXITCODE -ne 0 -or $cotaIds.Count -ne 1) { throw 'Não foi possível identificar um único contêiner do Cota nesta pasta.' }
     $cotaId = $cotaIds[0]
-    $cotaVolume = docker inspect --format '{{range .Mounts}}{{if and (eq .Destination "/app/data") (eq .Type "volume")}}{{.Name}}{{end}}{{end}}' $cotaId
+    $mountJson = docker inspect --format '{{json .Mounts}}' $cotaId
+    if ($LASTEXITCODE -ne 0) { throw 'Falha ao identificar o volume.' }
+    $mounts = $mountJson | ConvertFrom-Json
+    $volumes = @($mounts | Where-Object { $_.Destination -eq '/app/data' -and $_.Type -eq 'volume' })
+    if ($volumes.Count -ne 1) { throw 'Volume padrão não encontrado.' }
+    $cotaVolume = $volumes[0].Name
     $cotaImage = docker inspect --format '{{.Image}}' $cotaId
     if (-not $cotaVolume -or $cotaImage -notmatch '^sha256:[a-f0-9]{64}$') { throw 'Não foi possível confirmar o volume e a imagem existentes. Nenhum arquivo foi alterado.' }
     $cotaDriver = docker volume inspect --format '{{.Driver}}' $cotaVolume
     $cotaOptions = docker volume inspect --format '{{json .Options}}' $cotaVolume
     if ($LASTEXITCODE -ne 0 -or $cotaDriver -ne 'local' -or $cotaOptions -notin @('null','{}')) { throw 'O volume não é local padrão. A recuperação automática foi interrompida.' }
-    docker stop --time 30 $cotaId
+    docker stop --timeout 30 $cotaId
     if ($LASTEXITCODE -ne 0) { throw 'Não foi possível parar o Cota.' }
     $cotaAtivos = @(docker ps --filter "volume=$cotaVolume" --quiet)
     if ($LASTEXITCODE -ne 0 -or $cotaAtivos.Count -gt 0) { throw 'Outro contêiner ainda usa o volume, ou a verificação falhou. Nenhum bloqueio foi removido.' }
