@@ -3,10 +3,10 @@ import {randomUUID,createHash} from 'node:crypto';
 import {z} from 'zod';
 import {mediaInfo,maxMediaBytes,sendMediaBytes} from './media.js';
 const fail=(message,status=409)=>Object.assign(new Error(message),{status});
-export function quotedTarget(store,chat,id){if(!id)return null;const target=store.message(id);if(!target||target.chat_id!==chat.id)throw fail('Mensagem citada não encontrada.',404);if(chat.channel!=='simulator'&&!target.provider_id)throw fail('Esta mensagem ainda não foi confirmada no WhatsApp.');return{...target,body:target.body||({image:"[Foto]",video:"[Vídeo]",audio:"[Áudio]"}[target.media_kind||target.media_type?.split("/")[0]]||"[Mensagem]")};}
+export function quotedTarget(store,chat,id){if(!id)return null;const target=store.message(id);if(!target||target.chat_id!==chat.id)throw fail('Mensagem citada não encontrada.',404);if(target.deleted_at)throw fail('Mensagem apagada.',410);if(chat.channel!=='simulator'&&!target.provider_id)throw fail('Esta mensagem ainda não foi confirmada no WhatsApp.');return{...target,body:target.body||({image:"[Foto]",video:"[Vídeo]",audio:"[Áudio]"}[target.media_kind||target.media_type?.split("/")[0]]||"[Mensagem]")};}
 export function conversationToolsRoutes({app,store,agent,whatsapp,visibleChat,queued,canControl}){
  const upload=multer({storage:multer.memoryStorage(),limits:{fileSize:maxMediaBytes,files:1,fields:5}});
- const message=(chat,id)=>{const m=store.message(id);if(!m||m.chat_id!==chat.id)throw fail('Mensagem não encontrada.',404);return m;};
+ const message=(chat,id)=>{const m=store.message(id);if(!m||m.chat_id!==chat.id)throw fail('Mensagem não encontrada.',404);if(m.deleted_at)throw fail('Mensagem apagada.',410);return m;};
  const manual=(req,chat,version)=>{canControl(req,chat);if(chat.mode!=='manual'||chat.assigned_user_id!==req.user.id)throw fail('Assuma a conversa antes de continuar.');if(version!==chat.routing_version)throw fail('O responsável mudou. Atualize a conversa.');};
  app.get('/api/chats/:id/messages/:messageId/media',(req,res)=>{const chat=visibleChat(req),m=message(chat,req.params.messageId);const row=store.get('SELECT media_data,media_type FROM messages WHERE id=?',m.id);if(!row?.media_data)throw fail('Arquivo não disponível. Carregue a mídia novamente.',404);sendMediaBytes(req,res,row);});
  app.post('/api/chats/:id/messages/:messageId/media/load',async(req,res)=>{const chat=visibleChat(req),m=message(chat,req.params.messageId);await whatsapp.loadMessageMedia(m.id);res.json(store.message(m.id));});

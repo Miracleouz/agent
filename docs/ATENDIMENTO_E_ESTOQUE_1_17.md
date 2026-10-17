@@ -1,5 +1,7 @@
 # Cota 1.17.0 — compras, conversa ampliada e mídia
 
+Na versão 1.17.1, os controles de edição e exclusão foram ampliados por cargo. Consulte [Editar e apagar para todos](EDITAR_E_APAGAR_1_17_1.md).
+
 ## Concluir uma compra e baixar o estoque
 
 O cliente dizer “vou comprar” ou “pode separar” gera o alerta de compra. Como uma cotação pode oferecer várias marcas e cortes, a baixa ocorre quando o atendente confirma os itens escolhidos no painel:

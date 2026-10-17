@@ -12,6 +12,7 @@ import {WhatsAppMonitor} from './whatsapp-monitor.js';
 import {WhatsAppSync} from './whatsapp-sync.js';
 import {WhatsAppReadSync} from './whatsapp-read.js';
 import {WhatsAppAvatars} from './whatsapp-avatars.js';
+import {revokeForEveryone} from './whatsapp-revoke.js';
 import {sendConfirmed} from './whatsapp-send.js';
 import {WhatsAppClient} from './whatsapp-client.js';
 import {connectionStageLabel} from './connection-progress.js';
@@ -95,7 +96,7 @@ export class WhatsApp {
      const chatId=result.chatId||existing?.chat_id;if(!chatId||result.ignored||existing?.media_type)return;
      const media=await message.downloadMedia();if(this.generation!==generation||this.client!==client||!media?.data||media.data.length>Math.ceil(maxMediaBytes*4/3)+4)return;
      const data=Buffer.from(media.data,'base64'),info=mediaInfo(data,media.mimetype);
-     this.store.run("UPDATE messages SET media_type=?,media_kind=?,media_name=?,media_size=?,media_data=?,body=? WHERE provider_id=? AND chat_id=? AND direction='in' AND inbound_verified=1",info.type,info.kind,'arquivo.'+info.extension,data.length,data,String(message.body||'').slice(0,4000),message.id._serialized,chatId);this.store.changed();if(info.kind==='audio'&&process.env.AUTO_TRANSCRIBE==='true')this.transcription.request(this.store.get('SELECT id FROM messages WHERE provider_id=?',message.id._serialized).id).catch(()=>{});
+     this.store.run("UPDATE messages SET media_type=?,media_kind=?,media_name=?,media_size=?,media_data=?,body=? WHERE provider_id=? AND chat_id=? AND direction='in' AND inbound_verified=1 AND deleted_at IS NULL",info.type,info.kind,'arquivo.'+info.extension,data.length,data,String(message.body||'').slice(0,4000),message.id._serialized,chatId);this.store.changed();if(info.kind==='audio'&&process.env.AUTO_TRANSCRIBE==='true')this.transcription.request(this.store.get('SELECT id FROM messages WHERE provider_id=?',message.id._serialized).id).catch(()=>{});
     }).catch(()=>{});this.mediaTasks.add(task);task.finally(()=>this.mediaTasks.delete(task));
    }
   };
@@ -103,7 +104,9 @@ export class WhatsApp {
   client.on('cota_live_message',message=>{if(message?.fromMe)this.mirrorOutgoing(message,client,generation);else received(message);});
   client.on('message_create',message=>{const task=this.mirrorOutgoing(message,client,generation);if(message.fromMe||message.id?.fromMe){if(['image','video','audio','ptt'].includes(message.type)&&typeof message.downloadMedia==='function')this.trackMedia(this.hydrateOutgoingMedia(message,task));}});
   client.on('message_reaction',reaction=>{if(this.client!==client||this.generation!==generation||this.status!=='ready')return;const id=reaction.msgId?._serialized||reaction.msgId?.$1||reaction.msgId,m=this.store.get('SELECT id FROM messages WHERE provider_id=?',typeof id==='string'?id:'');if(!m)return;const ownIds=[client.info?.wid?._serialized||client.info?.wid?.$1,client.info?.lid?._serialized||client.info?.lid?.$1].filter(Boolean),sender=typeof reaction.senderId==='string'?reaction.senderId:reaction.senderId?._serialized||reaction.senderId?.$1;if(!sender)return;this.store.setReaction(m.id,ownIds.includes(sender)?'store':sender,String(reaction.reaction||'').slice(0,32),ownIds.includes(sender)?'WhatsApp da loja':'Cliente');});
-  client.on('cota_live_error',()=>{if(this.generation===generation&&this.client===client)this.logger.error('[WhatsApp live] message_model_unavailable');});
+  client.on('message_revoke_everyone',(after,before)=>{if(this.client!==client||this.generation!==generation||this.status!=='ready')return;const key=before?.id||after?.protocolMessageKey||after?.id,id=typeof key==='string'?key:key?._serialized||key?.$1;if(typeof id!=='string')return;const row=this.store.get('SELECT id FROM messages WHERE provider_id=?',id);if(row)this.store.revokeMessage(row.id);});
+  client.on('message_edit',(message,body)=>{if(this.client!==client||this.generation!==generation||this.status!=='ready'||typeof body!=='string')return;const id=message.id?._serialized||message.id?.$1,row=this.store.get('SELECT * FROM messages WHERE provider_id=?',id||'');if(!row||row.deleted_at||row.edit_state==='pending')return;const prefix=row.author_name?`*${row.author_name}*: `:null;this.store.run("UPDATE messages SET body=?,delivery_body=?,actions='[]',edited_at=?,edited_name='WhatsApp',edit_version=edit_version+1 WHERE id=?",prefix&&body.startsWith(prefix)?body.slice(prefix.length):body,body,Date.now(),row.id);this.store.cancelFollowups(row.chat_id);this.store.changed();});
+  client.on('cota_live_error' ,()=>{if(this.generation===generation&&this.client===client)this.logger.error('[WhatsApp live] message_model_unavailable');});
   Promise.resolve().then(()=>client.initialize()).catch(error=>{if(this.generation===generation&&this.client===client&&this.status!=='error')this.connectionFailed(error);});
   return this.snapshot();
  }
@@ -155,9 +158,9 @@ export class WhatsApp {
   return{id,aliases};
  }
  trackMedia(task){this.mediaTasks.add(task);task.finally(()=>this.mediaTasks.delete(task)).catch(()=>{});return task;}
- async hydrateQuote(id,message,client,generation){const quote=await message.getQuotedMessage();if(!quote||this.client!==client||this.generation!==generation)return;const chat=this.store.chat(this.store.get('SELECT chat_id FROM messages WHERE id=?',id)?.chat_id);if(!chat||!this.belongsToChat(quote,chat))return;const provider=quote.id?._serialized||quote.id?.$1;if(!provider)return;const local=this.store.get('SELECT id FROM messages WHERE provider_id=? AND chat_id=?',provider,chat.id);this.store.run('UPDATE messages SET quoted_message_id=?,quoted_provider_id=?,quoted_body=?,quoted_author=? WHERE id=?',local?.id||null,provider,String(quote.body||'[Mídia]').slice(0,4000),quote.fromMe?'WhatsApp da loja':chat.name,id);this.store.changed();}
+ async hydrateQuote(id,message,client,generation){const quote=await message.getQuotedMessage();if(!quote||this.client!==client||this.generation!==generation)return;const chat=this.store.chat(this.store.get('SELECT chat_id FROM messages WHERE id=?',id)?.chat_id);if(!chat||!this.belongsToChat(quote,chat))return;const provider=quote.id?._serialized||quote.id?.$1;if(!provider)return;const local=this.store.get('SELECT id,deleted_at FROM messages WHERE provider_id=? AND chat_id=?',provider,chat.id);this.store.run('UPDATE messages SET quoted_message_id=?,quoted_provider_id=?,quoted_body=?,quoted_author=? WHERE id=?',local?.id||null,provider,local?.deleted_at?'Mensagem apagada':String(quote.body||'[Mídia]').slice(0,4000),quote.fromMe?'WhatsApp da loja':chat.name,id);this.store.changed();}
  async hydrateOutgoingMedia(message,task){try{await task;const row=this.store.get('SELECT id,media_type FROM messages WHERE provider_id=?',message.id?._serialized||message.id?.$1);if(!row||row.media_type)return;await this.loadMessageMedia(row.id,message);}catch{}}
- async loadMessageMedia(id,source){const row=this.store.get('SELECT * FROM messages WHERE id=?',id);if(!row||row.media_type)return;const client=this.client,generation=this.generation;if(this.status!=='ready')throw new Error('WhatsApp desconectado.');const message=source||await client.getMessageById(row.provider_id),media=await message?.downloadMedia?.();if(!media?.data||media.data.length>Math.ceil(maxMediaBytes*4/3)+4)throw new Error('Mídia indisponível ou maior que 32 MB.');const data=Buffer.from(media.data,'base64'),info=mediaInfo(data,media.mimetype);if(this.client!==client||this.generation!==generation)return;this.store.run('UPDATE messages SET media_type=?,media_kind=?,media_name=?,media_size=?,media_data=? WHERE id=?',info.type,info.kind,'arquivo.'+info.extension,data.length,data,id);this.store.changed();}
+ async loadMessageMedia(id,source){const row=this.store.get('SELECT * FROM messages WHERE id=?',id);if(!row||row.media_type||row.deleted_at)return;const client=this.client,generation=this.generation;if(this.status!=='ready')throw new Error('WhatsApp desconectado.');const message=source||await client.getMessageById(row.provider_id),media=await message?.downloadMedia?.();if(!media?.data||media.data.length>Math.ceil(maxMediaBytes*4/3)+4)throw new Error('Mídia indisponível ou maior que 32 MB.');const data=Buffer.from(media.data,'base64'),info=mediaInfo(data,media.mimetype);if(this.client!==client||this.generation!==generation)return;this.store.run('UPDATE messages SET media_type=?,media_kind=?,media_name=?,media_size=?,media_data=? WHERE id=? AND deleted_at IS NULL',info.type,info.kind,'arquivo.'+info.extension,data.length,data,id);this.store.changed();}
  async sendMedia(chat,file,caption,{quotedMessageId}={}){if(this.status!=='ready')throw new Error('WhatsApp desconectado.');if(!/^\d+@(c\.us|lid|s\.whatsapp\.net)$/.test(chat.phone))throw new Error('O envio para grupos é bloqueado.');const info=mediaInfo(file.data,file.type);return sendConfirmed(this,chat,new MessageMedia(info.type,file.data.toString('base64'),file.name),{caption,...(quotedMessageId?{quotedMessageId,ignoreQuoteErrors:false}:{})});}
  async react(chat,providerId,emoji){if(this.status!=='ready')throw new Error('WhatsApp desconectado.');const client=this.client,generation=this.generation,message=await client.getMessageById(providerId);if(this.client!==client||this.generation!==generation||this.status!=='ready')throw new Error('WhatsApp desconectado.');if(!message||!this.belongsToChat(message,chat))throw new Error('Mensagem não encontrada nesta conversa.');await message.react(emoji);}
  belongsToChat(message,chat){const target=message.fromMe?message.to:message.from;return target===chat.phone||this.store.get('SELECT chat_id FROM whatsapp_chat_aliases WHERE alias=?',target)?.chat_id===chat.id;}
@@ -174,11 +177,20 @@ export class WhatsApp {
   if(!/^\d+@(c\.us|lid|s\.whatsapp\.net)$/.test(chat.phone))throw denied('Edição em grupos bloqueada.');
   const client=this.client,generation=this.generation,message=await client.getMessageById(providerId);
   if(this.client!==client||this.generation!==generation||this.status!=='ready')throw denied('O WhatsApp desconectou.');
-  if(!message?.fromMe||message.id?._serialized!==providerId)throw denied('Mensagem enviada não encontrada.');
+  if(!message?.fromMe||(message.id?._serialized||message.id?.$1)!==providerId)throw denied('Mensagem enviada não encontrada.');
   const mapped=this.store.get('SELECT chat_id FROM whatsapp_chat_aliases WHERE alias=?',message.to||'');
   if(message.to!==chat.phone&&mapped?.chat_id!==chat.id)throw denied('O destinatário da mensagem não corresponde à conversa.');
   const edited=await message.edit(body,{linkPreview:false});if(!edited)throw denied('O WhatsApp não permitiu esta edição.');
-  if(edited.id?._serialized!==providerId)throw new Error('Não foi possível confirmar a edição.');return providerId;
+  if(this.client!==client||this.generation!==generation||this.status!=='ready'||(edited.id?._serialized||edited.id?.$1)!==providerId)throw new Error('Não foi possível confirmar a edição.');return providerId;
+ }
+ async deleteMessage(chat,providerId){
+  const denied=()=>Object.assign(new Error('O WhatsApp não permite apagar esta mensagem para todos.'),{definite:true});
+  if(this.status!=='ready'||!this.client||!/^\d+@(c\.us|lid|s\.whatsapp\.net)$/.test(chat.phone))throw denied();
+  const client=this.client,generation=this.generation,targets=[chat.phone,...this.store.all('SELECT alias FROM whatsapp_chat_aliases WHERE chat_id=?',chat.id).map(r=>r.alias)];
+  const result=await bounded(()=>client.pupPage.evaluate(revokeForEveryone,{providerId,targets}),8000,'COTA_REVOKE_TIMEOUT');
+  if(result?.state==='denied')throw denied();
+  if(this.client!==client||this.generation!==generation||this.status!=='ready'||result?.state!=='confirmed'||result.id!==providerId)throw new Error('Exclusão não confirmada. Confira no WhatsApp antes de tentar novamente.');
+  return providerId;
  }
  async drainMedia(){await Promise.allSettled([...this.mediaTasks]);}
  disconnect(){

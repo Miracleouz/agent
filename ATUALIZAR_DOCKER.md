@@ -1,6 +1,6 @@
-# Atualizar para a versão 1.17.0 no Docker
+# Atualizar para a versão 1.17.1 no Docker
 
-A versão 1.17.0 adiciona confirmação de compra com baixa de estoque por item e medida, reativação do bot ao liberar o chat, atendimento em tela ampliada, mídia, reações, citação e transcrição local. Veja o [guia dos recursos e limites](docs/ATENDIMENTO_E_ESTOQUE_1_17.md). Mantém as correções de sincronização e identificadores do WhatsApp da 1.16.2.
+A versão 1.17.1 inclui [edição e exclusão para todos por cargo](docs/EDITAR_E_APAGAR_1_17_1.md). Mantém os recursos da 1.17.0, que adiciona confirmação de compra com baixa de estoque por item e medida, reativação do bot ao liberar o chat, atendimento em tela ampliada, mídia, reações, citação e transcrição local. Veja o [guia dos recursos e limites](docs/ATENDIMENTO_E_ESTOQUE_1_17.md). Mantém as correções de sincronização e identificadores do WhatsApp da 1.16.2.
 
 Use a instalação que já está funcionando. O ZIP contém o código; estoque, usuários, conversas e sessão do WhatsApp permanecem no volume existente.
 
@@ -12,7 +12,7 @@ Use a instalação que já está funcionando. O ZIP contém o código; estoque, 
 docker compose stop -t 30 cota
 ```
 
-4. Copie o conteúdo da pasta extraída (`agent-<código>` no download do GitHub ou `cota-whatsapp-1.17.0` no pacote local) para a pasta da instalação atual, substituindo os arquivos do código. O `compose.yaml`, o `Dockerfile`, `server` e `src` devem ficar diretamente na pasta atual, sem criar outra pasta dentro dela. Preserve seu `.env`, dados locais e eventuais ajustes próprios de porta, domínio ou volumes no `compose.yaml`.
+4. Copie o conteúdo da pasta extraída (`agent-<código>` no download do GitHub ou `cota-whatsapp-1.17.1` no pacote local) para a pasta da instalação atual, substituindo os arquivos do código. O `compose.yaml`, o `Dockerfile`, `server` e `src` devem ficar diretamente na pasta atual, sem criar outra pasta dentro dela. Preserve seu `.env`, dados locais e eventuais ajustes próprios de porta, domínio ou volumes no `compose.yaml`.
 5. Na mesma pasta e usando o mesmo projeto Compose da instalação anterior, execute:
 
 ```powershell
@@ -34,7 +34,7 @@ docker compose logs --tail=100 cota
 docker compose exec cota node -p "require('./package.json').version"
 ```
 
-Deve mostrar `1.17.0`.
+Deve mostrar `1.17.1`.
 
 8. Perfis gerenciados pela versão 1.17.0 recuperam bloqueios antigos automaticamente. Para um bloqueio **profile_busy** herdado de versões anteriores, use **Recuperar conexão** uma vez, preservando a autenticação. Esse procedimento não precisa de **Recriar conexão**. Para o erro **profile_busy**, abra **WhatsApp → Recuperar conexão** após confirmar que todas as outras instâncias que usam a mesma sessão estão paradas. Marque a confirmação e clique em **Recuperar e gerar QR**. A atualização do código sozinha não remove links de bloqueio antigos; esse passo os recupera preservando os dados. Se o erro for **browser_close_timeout**, reinicie o serviço antes de tentar novamente:
 
@@ -56,7 +56,7 @@ Na primeira atualização para 1.13.0, os contadores antigos de WhatsApp são ze
 
 A versão 1.14.0 sincroniza a leitura com o celular ao abrir a conversa, consultar por Contatos e responder pelo painel ou pelo bot. Faça um teste enviando uma mensagem de outro WhatsApp para a loja e abra o chat no Cota: deve aparecer **Leitura sincronizada com o WhatsApp** e a marcação de não lida deve sair do celular. Ler no celular também limpa o contador do painel, sem transferir o responsável. Se aparecer uma pendência, use **Sincronizar leitura** após conferir a conexão; isso não reenvia a resposta. Os checks azuis só aparecem quando o WhatsApp informar que o cliente leu. Alertas de pedido e atendente continuam independentes da leitura. Veja [LEITURA_E_PAINEL_MP.md](docs/LEITURA_E_PAINEL_MP.md).
 
-O histórico, as fotos e os registros de edição ficam no banco do volume existente. Fechar o painel ou transferir o chat preserva as mensagens e os autores. Depois de assumir um atendimento manual, use **Enviar foto** para JPEG/PNG/WebP de até 8 MB. Use **Editar** para corrigir textos e legendas em até 15 minutos do envio, quando o WhatsApp permitir; **Ver edições** mostra as versões anteriores. Um Comercial edita suas próprias mensagens; Admin precisa assumir o chat para editar mensagens de outro atendente. A imagem original é mantida. Confira uma conversa ao sair/entrar novamente e após transferir para outro usuário.
+O histórico, as fotos e os registros de edição ficam no banco do volume existente. Fechar o painel ou transferir o chat preserva as mensagens e os autores. Depois de assumir um atendimento manual, use **Enviar foto** para JPEG/PNG/WebP de até 8 MB. Use **Editar** para corrigir textos e legendas em até 15 minutos do envio, quando o WhatsApp permitir; **Ver edições** mostra as versões anteriores. Um Comercial edita e apaga suas próprias mensagens no atendimento manual. Admin pode editar ou apagar mensagens enviadas pelo número da loja, inclusive do bot e de outros atendentes, sem transferir a conversa. O WhatsApp determina prazos e permissões. A imagem original é mantida. Confira uma conversa ao sair/entrar novamente e após transferir para outro usuário.
 
 A aba **Contatos** permite cadastrar nome, WhatsApp e empresa e clicar em **Conversar**. Com o WhatsApp conectado, a conversa abre em atendimento manual e fica com o usuário que assumiu. A primeira mensagem só sai quando ele escrever e clicar em enviar; o bot não inicia contato sozinho. Apenas Admin exclui contatos, mantendo o histórico. O guia completo está em `INSTALAR.md`.
 
