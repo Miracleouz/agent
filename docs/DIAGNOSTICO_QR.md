@@ -59,3 +59,5 @@ Se houver apenas timeout e recursos/rede estiverem adequados, `WHATSAPP_AUTH_TIM
 Em 16/10/2026, foram aprovados **2.186 testes de servidor**, incluindo **48 testes novos** de diagnóstico, privacidade dos erros, limites de espera, eventos atrasados, reconexões concorrentes e cancelamento durante limpeza do navegador. Passaram também **17 testes de navegador**, incluindo a exibição de um erro de perfil ocupado e uma nova tentativa que gera QR sem logout ou envio. A regressão mantém as conversas e regras de não iniciar contato automaticamente. O build de produção passou.
 
 O comando `npm run whatsapp:diagnose` foi executado com Chromium real e gerou um QR, sem pareamento e sem mensagens. A máquina do usuário ainda precisa ser verificada com seus próprios logs. A imagem Docker não foi construída neste ambiente.
+
+Na versão 1.15.5, `profile_busy` também oferece **Recuperar conexão** no painel, com confirmação e manutenção restrita aos links antigos. `browser_close_timeout` impede abrir outro navegador enquanto o encerramento falhou; `logout_failed` informa que a desvinculação não foi confirmada. Veja [DESCONECTAR_E_RECUPERAR_QR.md](DESCONECTAR_E_RECUPERAR_QR.md).

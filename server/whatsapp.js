@@ -10,8 +10,11 @@ import {WhatsAppAvatars} from './whatsapp-avatars.js';
 import {sendConfirmed} from './whatsapp-send.js';
 import {WhatsAppClient} from './whatsapp-client.js';
 import {connectionStageLabel} from './connection-progress.js';
+import {recoverProfile} from './whatsapp-profile.js';
 const {LocalAuth,MessageMedia}=wa;
-function closeClient(client,timeout){return new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error('COTA_BROWSER_CLOSE_TIMEOUT')),timeout);Promise.resolve().then(()=>client.destroy()).then(value=>{clearTimeout(timer);resolve(value);},()=>{clearTimeout(timer);reject(new Error('COTA_BROWSER_CLOSE_TIMEOUT'));});});}
+function bounded(operation,timeout,code){return new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error(code)),timeout);Promise.resolve().then(operation).then(value=>{clearTimeout(timer);resolve(value);},()=>{clearTimeout(timer);reject(new Error(code));});});}
+const closures=new WeakMap();
+function closeClient(client,timeout){if(!closures.has(client))closures.set(client,bounded(()=>client.destroy(),timeout,'COTA_BROWSER_CLOSE_TIMEOUT'));return closures.get(client);}
 export class WhatsApp {
  constructor(store,dataDir,{clientFactory=options=>new WhatsAppClient(options),logger=console,startupTimeout=null,cleanupTimeout=6000}={}){this.store=store;this.dataDir=dataDir;this.clientFactory=clientFactory;this.logger=logger;this.startupTimeout=startupTimeout;this.cleanupTimeout=cleanupTimeout;this.client=null;this.status='disconnected';this.qr=null;this.error=null;this.number=null;this.receiver=null;this.generation=0;this.mediaTasks=new Set();this.syncer=new WhatsAppSync(this);this.readSync=new WhatsAppReadSync(this);this.avatars=new WhatsAppAvatars(this);}
  snapshot(){return {status:this.status,qr:this.qr,error:this.error,number:this.number,transport:'qr',nativeButtons:false,progress:{stage:this.stage||null,message:connectionStageLabel(this.stage),deadlineAt:this.deadlineAt||null},sync:this.syncer.snapshot()};}
@@ -21,6 +24,9 @@ export class WhatsApp {
  update(status,error=null){if(!['starting','authenticated'].includes(status))this.clearStartup();if(status!=='ready'&&this.readSync?.pending.size)this.readSync.reset();this.status=status;this.error=error;if(status!=='ready')this.store.cancelFollowups(null,{whatsappOnly:true});this.store.changed();}
  connectionFailed(error){const diagnosis=connectionError(error);this.qr=null;this.number=null;this.update('error',`${diagnosis.message} Código: ${diagnosis.code}.`);this.store.event('whatsapp_error',this.error);this.logger.error(`[WhatsApp] ${diagnosis.code}: ${safeConnectionDetail(error)}`);}
  connect(){
+  if(this.disconnecting)return this.disconnecting.then(()=>this.connect());
+  if(this.logoutWork)return Promise.reject(Object.assign(new Error('A desvinculação anterior ainda está pendente. Aguarde ou reinicie o serviço antes de conectar novamente.'),{status:503}));
+  if(this.recovering)return this.recovering;
   if(this.connecting)return this.connecting;
   const task=this.startConnection();this.connecting=task;return task.finally(()=>{if(this.connecting===task)this.connecting=null;});
  }
@@ -29,9 +35,10 @@ export class WhatsApp {
   const generation=++this.generation;
   this.clearStartup();
   this.syncer.reset();this.readSync.reset();this.avatars.reset();this.readyAt=null;
-  const previous=this.client;this.client=null;this.qr=null;this.number=null;this.update('starting');
+  const previous=this.client;this.qr=null;this.number=null;this.update('starting');
   if(previous){this.progress('closing_previous');try{await closeClient(previous,this.cleanupTimeout);}catch(error){if(this.generation===generation){this.client=previous;this.connectionFailed(error);}return this.snapshot();}}
   if(this.generation!==generation)return this.snapshot();
+  this.client=null;
   const executablePath=process.env.CHROME_PATH||['/usr/bin/chromium','/usr/bin/chromium-browser','/usr/bin/google-chrome'].find(existsSync);
   if(!executablePath||!existsSync(executablePath)){this.connectionFailed(new Error('Chromium não encontrado. Confira CHROME_PATH.'));return this.snapshot();}
   const args=['--no-sandbox','--disable-setuid-sandbox','--disable-dev-shm-usage'];
@@ -124,6 +131,38 @@ export class WhatsApp {
   if(edited.id?._serialized!==providerId)throw new Error('Não foi possível confirmar a edição.');return providerId;
  }
  async drainMedia(){await Promise.allSettled([...this.mediaTasks]);}
- async disconnect(){++this.generation;this.clearStartup();this.syncer.reset();this.readSync.reset();this.avatars.reset();const client=this.client;this.client=null;if(client){try{if(this.status==='ready')await client.logout();}catch{}await closeClient(client,this.cleanupTimeout).catch(()=>{});}this.qr=null;this.number=null;this.update('disconnected');}
- async close(){++this.generation;this.clearStartup();this.syncer.reset();this.readSync.reset();this.avatars.reset();if(this.client)await closeClient(this.client,this.cleanupTimeout).catch(()=>{});}
+ disconnect(){
+  if(this.disconnecting)return this.disconnecting;
+  if(this.logoutWork)return Promise.reject(Object.assign(new Error('A desvinculação anterior ainda está pendente. Aguarde ou reinicie o serviço antes de desconectar novamente.'),{status:503}));
+  if(this.recovering)return this.recovering.then(()=>this.disconnect());
+  const logout=this.status==='ready';++this.generation;this.clearStartup();this.syncer.reset();this.readSync.reset();this.avatars.reset();this.readyAt=null;this.qr=null;this.number=null;this.progress('disconnecting');this.update('disconnecting');
+  const task=this.stopConnection(logout);this.disconnecting=task;task.then(()=>{if(this.disconnecting===task)this.disconnecting=null;},()=>{if(this.disconnecting===task)this.disconnecting=null;});return task;
+ }
+ async stopConnection(logout){
+  try{
+   await this.connecting?.catch(()=>{});const client=this.client;let logoutError;
+   if(client){if(logout)try{const work=Promise.resolve().then(()=>client.logout());this.logoutWork=work;const settled=()=>{if(this.logoutWork===work)this.logoutWork=null;};work.then(settled,settled);await bounded(()=>work,this.cleanupTimeout,'COTA_LOGOUT_FAILED');}catch(error){logoutError=error;}
+    await closeClient(client,this.cleanupTimeout);if(this.client===client)this.client=null;
+   }
+   if(logoutError)throw logoutError;
+   this.stage=null;this.update('disconnected');return this.snapshot();
+  }catch(error){this.connectionFailed(error);throw Object.assign(new Error(this.error),{status:503});}
+ }
+ recover({allOtherInstancesStopped=false}={}){
+  if(allOtherInstancesStopped!==true)return Promise.reject(Object.assign(new Error('Confirme que todas as outras instâncias que usam esta sessão estão paradas.'),{status:400}));
+  if(this.recovering)return this.recovering;
+  if(this.logoutWork)return Promise.reject(Object.assign(new Error('Aguarde a desvinculação pendente ou reinicie o serviço antes de recuperar.'),{status:503}));
+  if(this.disconnecting||['starting','qr','authenticated','ready'].includes(this.status))return Promise.reject(Object.assign(new Error('Desconecte esta tentativa antes de recuperar a conexão.'),{status:409}));
+  ++this.generation;this.qr=null;this.number=null;this.progress('profile_recovery');this.update('recovering');
+  const task=this.recoverConnection();this.recovering=task;task.then(()=>{if(this.recovering===task)this.recovering=null;},()=>{if(this.recovering===task)this.recovering=null;});return task;
+ }
+ async recoverConnection(){
+  try{
+   await this.connecting?.catch(()=>{});
+   if(this.client){await closeClient(this.client,this.cleanupTimeout);this.client=null;}
+   await recoverProfile(this.dataDir,{clear:true,offlineConfirmed:true});
+   this.stage=null;this.update('disconnected');return await this.startConnection();
+  }catch(error){const failure=error.message==='COTA_BROWSER_CLOSE_TIMEOUT'?error:new Error('COTA_PROFILE_RECOVERY_FAILED');this.connectionFailed(failure);throw Object.assign(new Error(this.error),{status:409});}
+ }
+ async close(){++this.generation;this.clearStartup();this.syncer.reset();this.readSync.reset();this.avatars.reset();await this.connecting?.catch(()=>{});await this.disconnecting?.catch(()=>{});await this.recovering?.catch(()=>{});++this.generation;this.clearStartup();if(this.client)await closeClient(this.client,this.cleanupTimeout).catch(()=>{});}
 }

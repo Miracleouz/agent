@@ -15,7 +15,17 @@ export async function visibleProfileUsers(profile,{procDir='/proc',self=process.
   try{command=await readFile(join(procDir,pid,'cmdline'),'utf8');}
   catch(error){if(absent(error)||error.code==='ESRCH')continue;throw new Error('Não foi possível verificar os processos. Nenhum bloqueio foi removido.');}
   const args=command.split('\0').filter(Boolean);
-  if(args.some(arg=>arg==='server/index.js'||arg.endsWith('/server/index.js')))return true;
+  if(args.some(arg=>arg==='server/index.js'||arg.endsWith('/server/index.js'))){
+   // A different Cota may legitimately use a separate volume. Inspect only its
+   // configured data path in memory; never return or log process environment.
+   try{
+    const environment=await readFile(join(procDir,pid,'environ'),'utf8');
+    const dataDir=environment.split('\0').find(value=>value.startsWith('DATA_DIR='))?.slice(9);
+    const cwd=await realpath(join(procDir,pid,'cwd'));
+    const root=await realpath(resolve(cwd,dataDir||'./data'));
+    if(join(root,'whatsapp','session')===profile)return true;
+   }catch{return true;}
+  }
   if(args.some((arg,index)=>arg.startsWith('--user-data-dir=')?resolve(arg.slice('--user-data-dir='.length))===profile:arg==='--user-data-dir'&&args[index+1]&&resolve(args[index+1])===profile))return true;
  }
  return false;

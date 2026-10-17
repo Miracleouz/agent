@@ -199,3 +199,5 @@ Na versão **1.15.2**, conversas, grupos, contatos e histórico do WhatsApp só 
 A versão **1.15.3** aguarda os componentes de autenticação antes de gerar o QR e trata erros de navegação que podiam derrubar o processo. A sessão e o histórico são preservados. Durante uma recarga do WhatsApp, o bot pausa os envios e os dados ficam ocultos até a conexão ficar pronta. Veja [AUTENTICACAO_E_NAVEGACAO.md](docs/AUTENTICACAO_E_NAVEGACAO.md).
 
 A versão **1.15.4** mostra o progresso da conexão e limita a preparação inteira, inclusive a abertura do navegador e o carregamento inicial da página. Um recurso opcional pendente deixa de impedir o QR. Ao aparecer o QR, a espera pela leitura fica sob as regras do próprio WhatsApp. Veja [CARREGAMENTO_QR.md](docs/CARREGAMENTO_QR.md).
+
+Na versão 1.15.5, **WhatsApp → Recuperar conexão** permite remover bloqueios antigos após confirmar que outras instâncias da mesma sessão estão paradas. Desconectar agora aguarda o navegador e informa falhas sem mostrar sucesso falso. Veja [DESCONECTAR_E_RECUPERAR_QR.md](docs/DESCONECTAR_E_RECUPERAR_QR.md).

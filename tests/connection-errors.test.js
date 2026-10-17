@@ -10,6 +10,8 @@ import {WhatsApp} from '../server/whatsapp.js';
 import {connectionError,safeConnectionDetail,authenticationTimeout} from '../server/connection-errors.js';
 const cases=[
  ['COTA_CONNECTION_TIMEOUT','connection_timeout'],
+ ['COTA_LOGOUT_FAILED','logout_failed'],
+ ['COTA_PROFILE_RECOVERY_FAILED','profile_recovery_failed'],
  ['COTA_BROWSER_CLOSE_TIMEOUT','browser_close_timeout'],
  ['Cannot read properties of null (reading \'Socket\')','auth_modules'],
  ['COTA_AUTH_MODULES_UNAVAILABLE','auth_modules'],
@@ -85,5 +87,5 @@ test('concurrent reconnect clicks cannot launch two browsers on the same session
  const f=await fixture(t,()=>{throw new Error('auth timeout');});await f.whatsapp.connect();await tick();let finish;f.clients[0].destroy=()=>new Promise(resolve=>{finish=resolve;});const one=f.whatsapp.connect(),two=f.whatsapp.connect();await tick();assert.equal(f.clients.length,1);finish();await Promise.all([one,two]);await tick();assert.equal(f.clients.length,2);assert.equal(f.whatsapp.status,'error');
 });
 test('disconnect during previous browser cleanup cancels the reconnect before a new browser starts',async t=>{
- const f=await fixture(t,()=>{throw new Error('auth timeout');});await f.whatsapp.connect();await tick();let finish;f.clients[0].destroy=()=>new Promise(resolve=>{finish=resolve;});const pending=f.whatsapp.connect();await tick();await f.whatsapp.disconnect();finish();await pending;assert.equal(f.clients.length,1);assert.equal(f.whatsapp.status,'disconnected');assert.equal(f.whatsapp.client,null);
+ const f=await fixture(t,()=>{throw new Error('auth timeout');});await f.whatsapp.connect();await tick();let finish;f.clients[0].destroy=()=>new Promise(resolve=>{finish=resolve;});const pending=f.whatsapp.connect();await tick();const stopping=f.whatsapp.disconnect();assert.equal(f.whatsapp.status,'disconnecting');finish();await Promise.all([pending,stopping]);assert.equal(f.clients.length,1);assert.equal(f.whatsapp.status,'disconnected');assert.equal(f.whatsapp.client,null);
 });

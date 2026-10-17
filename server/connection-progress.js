@@ -1,4 +1,6 @@
 export const connectionStages={
+ disconnecting:'Encerrando a conexão com o WhatsApp…',
+ profile_recovery:'Recuperando a conexão salva…',
  closing_previous:'Finalizando a tentativa anterior…',
  browser_start:'Abrindo o navegador do WhatsApp…',
  page_load:'Abrindo a página do WhatsApp Web…',

@@ -25,17 +25,20 @@ function within(operation,signal,timeout){
 export class WhatsAppClient extends wa.Client{
  constructor(options){
   super(options);this.stopping=false;this.controller=new AbortController();this.navigationTasks=new Set();this.guardedPages=new WeakSet();
+  this.launchSettled=new Promise(resolve=>{this.finishLaunch=resolve;});
   let page=this.pupPage;
   Object.defineProperty(this,'pupPage',{configurable:true,get:()=>page,set:value=>{page=value;if(value)this.guardNavigation(value);}});
   let browser=this.pupBrowser;
-  Object.defineProperty(this,'pupBrowser',{configurable:true,get:()=>browser,set:value=>{browser=value;if(value&&this.stopping)this.closeLateBrowser(value);}});
+  Object.defineProperty(this,'pupBrowser',{configurable:true,get:()=>browser,set:value=>{browser=value;if(value){this.launchPending=false;this.finishLaunch();if(this.stopping)this.closeLateBrowser(value);}}});
  }
  stage(value){this.connectionStage=value;this.emit('cota_stage',value);}
  initialize(){
   if(this.initializing)return this.initializing;
   if(this.stopping)return Promise.reject(new Error('COTA_AUTH_CANCELLED'));
   this.stage('browser_start');
-  const task=within(()=>super.initialize(),this.controller.signal,this.options.authTimeoutMs||90000).catch(async error=>{if(!this.stopping)await this.destroy().catch(()=>{});if(error?.name==='TimeoutError')throw new Error('COTA_CONNECTION_TIMEOUT');throw error;});
+  const before=this.authStrategy.beforeBrowserInitialized.bind(this.authStrategy);
+  this.authStrategy.beforeBrowserInitialized=async()=>{await before();if(this.stopping)throw new Error('COTA_AUTH_CANCELLED');this.launchPending=true;};
+  const task=within(()=>{const native=super.initialize();native.then(()=>{this.launchPending=false;this.finishLaunch();},()=>{this.launchPending=false;this.finishLaunch();});return native;},this.controller.signal,this.options.authTimeoutMs||90000).catch(async error=>{if(!this.stopping)await this.destroy().catch(()=>{});if(error?.name==='TimeoutError')throw new Error('COTA_CONNECTION_TIMEOUT');throw error;});
   this.initializing=task;return task;
  }
  closeLateBrowser(browser){
@@ -97,10 +100,15 @@ export class WhatsAppClient extends wa.Client{
    }
   }
  }
+ logout(){
+  if(this.loggingOut)return this.loggingOut;
+  // Stop reload handlers before the SDK closes the page and removes LocalAuth.
+  // A late navigation must not initialize that profile again during logout.
+  this.stopping=true;this.controller.abort();this.loggingOut=super.logout();return this.loggingOut;
+ }
  destroy(){
   if(this.destroying)return this.destroying;
   this.stopping=true;this.controller.abort();
-  const browser=this.pupBrowser;
-  this.destroying=within(()=>super.destroy(),new AbortController().signal,5000).catch(error=>{const process=browser?.process?.();if(process&&!process.killed)process.kill('SIGKILL');throw error;});return this.destroying;
+  this.destroying=within(async()=>{if(this.launchPending&&!this.pupBrowser)await this.launchSettled;await super.destroy();await this.lateBrowserClose;},new AbortController().signal,5000).catch(error=>{const process=this.pupBrowser?.process?.();if(process&&!process.killed)process.kill('SIGKILL');throw error;});return this.destroying;
  }
 }
