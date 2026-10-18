@@ -16,6 +16,8 @@ Novidades da **1.18.1**: [painéis por usuário, recuperação do histórico, co
 
 Testes da **1.18.1**: [resultados, regras de não lidas e limites de áudio/mídia](docs/JANELAS_POR_USUARIO_1_18_1.md#resultados-desta-entrega).
 
+Novidades da **1.18.2**: [correção do envio de fotos, download de áudio e diagnóstico do modelo local de voz](docs/CORRECAO_MIDIA_1_18_2.md).
+
 ## O que está implementado
 
 - **Acompanhamento para Admin:** responsáveis atuais, fila livre, espera do cliente, digitação e média de resposta por usuário em 24 horas, 7 ou 30 dias. Atualização por eventos, com recuperação por consulta periódica. Não cria mensagens nem assume chats ocupados.

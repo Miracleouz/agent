@@ -1,3 +1,4 @@
+import {mediaFailureCode} from './media-errors.js';
 import {randomUUID} from 'node:crypto';
 
 // Runs in the linked browser. Track the exact SDK send, before its final
@@ -18,6 +19,10 @@ export async function prepareSendReceipt({token,chatId}){
    const receipt=bridge.attempts.get(token),remote=value=>typeof value==='string'?value:(value?._serialized||value?.$1);
    const id=(message.id?._serialized||message.id?.$1);
    if(!receipt||receipt.state!=='prepared'||remote(chat.id)!==receipt.remoteId||remote(message.to)!==receipt.remoteId||remote(message.id?.remote)!==receipt.remoteId||message.id?.fromMe!==true||typeof id!=='string'||!id.startsWith('true_'+receipt.remoteId+'_'))throw new Error('COTA_SEND_RECEIPT_MISMATCH');
+   // MediaData's enumerable private ID overrides Msg's internal key when the
+   // SDK spreads the model. Keep the verified MsgKey, not the media model ID.
+   // Upstream fix: whatsapp-web.js 064a3d5, Injected/Utils.js.
+   delete message.__x_id;
    receipt.state='started';receipt.id=id;
    const result=original.call(this,chat,message,...args);
    if(!Array.isArray(result)||typeof result[0]?.then!=='function')throw new Error('COTA_SEND_QUEUE_UNCONFIRMED');
@@ -62,7 +67,8 @@ export async function sendConfirmed(wa,chat,content,options={}){
    wa.logger.error(`[WhatsApp send] before_queue kind=${wa.lastSendFailure.kind} code=${wa.lastSendFailure.code}`);
    throw Object.assign(new Error(typeof content==='string'?'O WhatsApp recusou a preparação da mensagem. Nenhuma mensagem foi enviada.':'O WhatsApp não conseguiu preparar ou carregar o arquivo para envio. Nenhuma mídia foi enviada. Confira o arquivo e tente novamente.'),{definite:true,cause:error});
   }
-  wa.logger.error('[WhatsApp send] unconfirmed');
+  wa.lastSendFailure={stage:'queue',state:receipt?.state||'missing',kind:typeof content==='string'?'text':'media',code:mediaFailureCode(error),at:Date.now()};
+  wa.logger.error(`[WhatsApp send] unconfirmed state=${wa.lastSendFailure.state} kind=${wa.lastSendFailure.kind} code=${wa.lastSendFailure.code}`);
   throw Object.assign(new Error('Envio não confirmado. Confira no WhatsApp antes de reenviar; a mensagem pode já ter sido enviada.'),{uncertain:true,cause:error});
  }
  if(!(result?.id?._serialized||result?.id?.$1)&&recovered)wa.logger.error('[WhatsApp send] receipt_recovered');

@@ -1,4 +1,6 @@
-# Atualizar para a versão 1.18.1 no Docker
+# Atualizar para a versão 1.18.2 no Docker
+
+A versão 1.18.2 corrige uma incompatibilidade interna no envio de fotos e usa o cache atual de arquivos do WhatsApp para carregar imagens e áudios. Inclui diagnóstico e preparo do modelo local de voz. Veja [correções, testes e limites](docs/CORRECAO_MIDIA_1_18_2.md). Mantém as atualizações anteriores.
 
 A versão 1.18.1 organiza o acompanhamento em **painéis separados por usuário**, com contatos e tempo de espera individual atualizado a cada segundo. Veja [painéis por usuário](docs/JANELAS_POR_USUARIO_1_18_1.md). Também inclui interpretação de áudio, cotações não lidas na sincronização, reativação de chats encerrados e correções de histórico e anexos. Inclui as atualizações anteriores.
 
@@ -16,7 +18,7 @@ Use a instalação que já está funcionando. O ZIP contém o código; estoque, 
 docker compose stop -t 30 cota
 ```
 
-4. Copie o conteúdo da pasta extraída (`agent-<código>` no download do GitHub ou `cota-whatsapp-1.18.1` no pacote local) para a pasta da instalação atual, substituindo os arquivos do código. O `compose.yaml`, o `Dockerfile`, `server` e `src` devem ficar diretamente na pasta atual, sem criar outra pasta dentro dela. Preserve seu `.env`, dados locais e eventuais ajustes próprios de porta, domínio ou volumes no `compose.yaml`.
+4. Copie o conteúdo da pasta extraída (`agent-<código>` no download do GitHub ou `cota-whatsapp-1.18.2` no pacote local) para a pasta da instalação atual, substituindo os arquivos do código. O `compose.yaml`, o `Dockerfile`, `server` e `src` devem ficar diretamente na pasta atual, sem criar outra pasta dentro dela. Preserve seu `.env`, dados locais e eventuais ajustes próprios de porta, domínio ou volumes no `compose.yaml`.
 5. Na mesma pasta e usando o mesmo projeto Compose da instalação anterior, execute:
 
 ```powershell
@@ -38,7 +40,16 @@ docker compose logs --tail=100 cota
 docker compose exec cota node -p "require('./package.json').version"
 ```
 
-Deve mostrar `1.18.1`.
+Deve mostrar `1.18.2`.
+
+Para preparar e conferir a transcrição local, execute cada comando separadamente:
+
+```powershell
+docker compose exec cota npm run audio:prepare
+docker compose exec cota npm run audio:diagnose
+```
+
+O primeiro preparo baixa o modelo de voz (cerca de 150 MB) para o volume existente. Precisa de Internet; os áudios são processados localmente. Não exige recriar a sessão do WhatsApp.
 
 8. Perfis gerenciados pela versão 1.17.0 recuperam bloqueios antigos automaticamente. Para um bloqueio **profile_busy** herdado de versões anteriores, use **Recuperar conexão** uma vez, preservando a autenticação. Esse procedimento não precisa de **Recriar conexão**. Para o erro **profile_busy**, abra **WhatsApp → Recuperar conexão** após confirmar que todas as outras instâncias que usam a mesma sessão estão paradas. Marque a confirmação e clique em **Recuperar e gerar QR**. A atualização do código sozinha não remove links de bloqueio antigos; esse passo os recupera preservando os dados. Se o erro for **browser_close_timeout**, reinicie o serviço antes de tentar novamente:
 

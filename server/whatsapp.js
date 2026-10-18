@@ -5,6 +5,7 @@ import {existsSync} from 'node:fs';
 import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {mediaInfo,maxMediaBytes} from './media.js';
+import {mediaFailureCode} from './media-errors.js';
 import {downloadCachedMedia} from './whatsapp-media.js';
 import {AudioTranscription} from './audio-transcription.js';
 import {photoInfo,maxPhotoBytes} from './images.js';
@@ -20,7 +21,7 @@ import {connectionStageLabel} from './connection-progress.js';
 import {acquireProfileLease,prepareManagedProfile,markManagedProfile} from './whatsapp-profile-lease.js';
 import {recoverProfile,recreateProfile,profileRecoveryError} from './whatsapp-profile.js';
 const {LocalAuth,MessageMedia}=wa;
-function bounded(operation,timeout,code){return new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error(code)),timeout);Promise.resolve().then(operation).then(value=>{clearTimeout(timer);resolve(value);},()=>{clearTimeout(timer);reject(new Error(code));});});}
+function bounded(operation,timeout,code){return new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error(code)),timeout);Promise.resolve().then(operation).then(value=>{clearTimeout(timer);resolve(value);},cause=>{clearTimeout(timer);reject(new Error(code,{cause}));});});}
 const closures=new WeakMap();
 function closeClient(client,timeout){if(!closures.has(client))closures.set(client,bounded(()=>client.destroy(),timeout,'COTA_BROWSER_CLOSE_TIMEOUT'));return closures.get(client);}
 export class WhatsApp {
@@ -112,7 +113,7 @@ export class WhatsApp {
  }
  async diagnostics(){
   await Promise.race([this.monitor.check(),new Promise(resolve=>{const timer=setTimeout(resolve,5500);timer.unref?.();})]);
-  return{version:manifest.version,serverTime:new Date().toISOString(),connection:this.status,lastSendFailure:this.lastSendFailure||null,agentEnabled:this.store.settings().agentEnabled!==false,realtime:this.monitor.snapshot(),history:this.store.all("SELECT h.status,count(*) count FROM whatsapp_history_sync h JOIN chats c ON c.id=h.chat_id WHERE c.channel='whatsapp' AND c.provider='qr' GROUP BY h.status"),messages:this.store.all("SELECT direction,status,inbound_verified,count(*) count FROM messages m JOIN chats c ON c.id=m.chat_id WHERE c.channel='whatsapp' AND c.provider='qr' AND m.created>=? GROUP BY direction,status,inbound_verified",Date.now()-30*86400000)};
+  return{version:manifest.version,serverTime:new Date().toISOString(),connection:this.status,lastSendFailure:this.lastSendFailure||null,lastMediaFailure:this.lastMediaFailure||null,transcription:this.transcription.snapshot(),agentEnabled:this.store.settings().agentEnabled!==false,realtime:this.monitor.snapshot(),history:this.store.all("SELECT h.status,count(*) count FROM whatsapp_history_sync h JOIN chats c ON c.id=h.chat_id WHERE c.channel='whatsapp' AND c.provider='qr' GROUP BY h.status"),messages:this.store.all("SELECT direction,status,inbound_verified,count(*) count FROM messages m JOIN chats c ON c.id=m.chat_id WHERE c.channel='whatsapp' AND c.provider='qr' AND m.created>=? GROUP BY direction,status,inbound_verified",Date.now()-30*86400000)};
  }
  sync(){return this.syncer.run();}
  loadGroupHistory(id){return this.syncer.groupHistory(id);}
@@ -170,10 +171,12 @@ export class WhatsApp {
   const chat=this.store.chat(row.chat_id),aliases=[chat.phone,...this.store.all('SELECT alias FROM whatsapp_chat_aliases WHERE chat_id=?',chat.id).map(r=>r.alias)];
   let media;
   try{media=await bounded(async()=>{
-   try{const message=source||await client.getMessageById(row.provider_id);if(message&&(message.id?._serialized||message.id?.$1)===row.provider_id&&this.belongsToChat(message,chat))media=await message.downloadMedia?.();}catch{}
-   if(!media?.data&&typeof client.pupPage?.evaluate==='function')media=await client.pupPage.evaluate(downloadCachedMedia,{providerId:row.provider_id,aliases,fromMe:row.direction!=='in',maxBytes:maxMediaBytes});
+   let downloadError;
+   if(typeof client.pupPage?.evaluate==='function')try{media=await client.pupPage.evaluate(downloadCachedMedia,{providerId:row.provider_id,aliases,fromMe:row.direction!=='in',maxBytes:maxMediaBytes});}catch(error){downloadError=error;if(/COTA_MEDIA_TARGET_MISMATCH/.test(error.message))throw error;}
+   if(!media?.data)try{const message=source||await client.getMessageById(row.provider_id);if(message&&(message.id?._serialized||message.id?.$1)===row.provider_id&&this.belongsToChat(message,chat))media=await message.downloadMedia?.();}catch(error){downloadError??=error;}
+   if(!media?.data&&downloadError)throw downloadError;
    return media;
-  },30000,'COTA_MEDIA_DOWNLOAD_TIMEOUT');}catch{throw Object.assign(new Error('O WhatsApp não disponibilizou este arquivo. Confira se ele ainda abre no celular e tente carregar novamente.'),{status:502});}
+  },30000,'COTA_MEDIA_DOWNLOAD_TIMEOUT');}catch(error){const code=mediaFailureCode(error);this.lastMediaFailure={code,stage:'download',kind:row.media_kind||'unknown',at:Date.now()};this.logger.error(`[WhatsApp media] stage=download code=${code} kind=${this.lastMediaFailure.kind}`);const detail=code==='COTA_MEDIA_TOO_LARGE'?'O arquivo excede o limite de 32 MB.':code==='COTA_MEDIA_DOWNLOAD_PENDING'||code==='COTA_MEDIA_REUPLOADING'?'O WhatsApp ainda está carregando o arquivo. Tente novamente em instantes.':'O WhatsApp não disponibilizou este arquivo. Confira se ele ainda abre no celular e tente carregar novamente.';throw Object.assign(new Error(detail),{status:code==='COTA_MEDIA_TOO_LARGE'?413:502,code});}
   if(!media?.data)throw Object.assign(new Error('Arquivo indisponível no WhatsApp. Confira se ele ainda abre no celular.'),{status:502});
   if(media.data.length>Math.ceil(maxMediaBytes*4/3)+4)throw Object.assign(new Error('O arquivo excede o limite de 32 MB.'),{status:413});
   const data=Buffer.from(media.data,'base64'),info=mediaInfo(data,media.mimetype);if(this.client!==client||this.generation!==generation||this.status!=='ready')throw Object.assign(new Error('A conexão mudou durante o download. Tente novamente.'),{status:409});
