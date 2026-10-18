@@ -165,7 +165,7 @@ export class Agent {
    return this.reply(chat,text,actions,'bot',{allowClosed:type==='end_conversation'});
   };
   if(help==='no'){
-   this.store.cancelFollowups(chat.id);clearQuote(this.store,chat.id);this.store.run("UPDATE chats SET closed_at=?,help_state='closed' WHERE id=?",now,chat.id);this.store.changed();return{chatId:chat.id,closed:true,intent:'end_conversation'};
+   this.store.closeChat(chat.id,now);return{chatId:chat.id,closed:true,intent:'end_conversation'};
   }
   if(help==='yes'){
    this.store.cancelFollowups(chat.id);clearQuote(this.store,chat.id);this.store.run("UPDATE chats SET help_state='awaiting_item' WHERE id=?",chat.id);this.store.changed();
@@ -196,7 +196,7 @@ export class Agent {
   if(chat.pickup_pending_details)this.store.run('UPDATE chats SET pickup_pending_details=0 WHERE id=?',chat.id);
   if(type!=='thanks'&&chat.help_state)this.store.run('UPDATE chats SET help_state=NULL WHERE id=?',chat.id);
   if(type==='end_conversation'){
-   this.store.run("UPDATE chats SET closed_at=?,query=NULL,shown='[]',quoted_options='[]',batch_queries='[]',pending_item_index=NULL,pending_measure=NULL,pending_selection=NULL WHERE id=?",now,chat.id);this.store.changed();
+   this.store.closeChat(chat.id,now,{keepOrigin:true});
    if(!chat.closed_at&&chat.mode==='auto'&&this.store.settings().agentEnabled)await respond('Conversa encerrada. Quando precisar de outra cotação, é só mandar uma nova mensagem. Obrigado!',[]);
    return{chatId:chat.id,closed:true,intent:type};
   }

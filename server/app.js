@@ -13,6 +13,7 @@ import {contactRoutes} from './contacts.js';
 import {conversationToolsRoutes,quotedTarget} from './conversation-tools.js';
 import {messageToolsRoutes} from './message-tools.js';
 import {orderRoutes} from './orders.js';
+import {orderBoardRoutes} from './order-board.js';
 import {sendAvatar} from './avatar-response.js';
 import {monitoring} from './monitoring.js';
 import {draftRoutes} from './drafts.js';
@@ -92,6 +93,10 @@ export function createApp({store,whatsapp,production=false,appUrl=process.env.AP
   res.json(await queued(req,chat=>{canControl(req,chat,input);return store.pause(chat.id,input.minutes,req.user.id);}));
  });
  app.post('/api/chats/:id/resume',async(req,res)=>{res.json(await queued(req,chat=>{if(req.user.role!=='admin')canControl(req,chat);clearPresence(chat.assigned_user_id,chat.id);return store.resume(chat.id);}));});
+ app.post('/api/chats/:id/close',async(req,res)=>{
+  const {version}=z.object({version:z.number().int().min(0)}).strict().parse(req.body);
+  res.json(await queued(req,chat=>{if(req.user.role!=='admin')canControl(req,chat);if(chat.routing_version!==version)throw fail('O atendimento mudou. Atualize antes de encerrar.',409);clearPresence(chat.assigned_user_id,chat.id);const closed=store.closeChat(chat.id);store.event('close',`Atendimento encerrado por ${req.user.name}. Agente automático aguardando nova mensagem.`);return closed;}));
+ });
  app.post('/api/chats/:id/assign',adminOnly,async(req,res)=>{
   const {userId}=z.object({userId:z.string().min(1).max(100)}).strict().parse(req.body);
   res.json(await queued(req,chat=>{
@@ -106,6 +111,7 @@ export function createApp({store,whatsapp,production=false,appUrl=process.env.AP
   store.changed();res.json({ok:true});
  });
  draftRoutes({app,store,visibleChat,queued,canControl});
+ orderBoardRoutes({app,store});
  orderRoutes({app,store,queued,visibleChat,canControl});
  app.post('/api/chats/:id/order/confirm',(req,_res)=>{const chat=getChat(req.params.id);canControl(req,chat);throw fail('Atualize o painel e use Confirmar compra para revisar itens e baixar o estoque.',409);});
  const agent=new Agent(store,(chat,body,actions,options)=>whatsapp.send(chat,body,actions,options),{canSend:chat=>chat.channel==='simulator'||whatsapp.snapshot().status==='ready'});whatsapp.receiver=input=>agent.receive(input);whatsapp.audioReceiver=id=>agent.finishAudio(id);

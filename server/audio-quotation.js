@@ -9,5 +9,9 @@ export function audioQuotationText(body){
  let text=conversationText(body).replace(/\bp(?:e)? (?:jota|j)\b/g,'pj').replace(/\bp(?:e)? (?:ka|ca|k)\b/g,'pk').replace(/\b(v|ve) (?:xis|x)\b/g,'vx').replace(/\ba (?:te|t)\b/g,'at');
  if(!/\b(?:correias?|sincronizadoras?|dentadas?|[abcdezh]|pj|pk|pl|pm|ph|at|t|\d+\s*(?:vx?|m)|sp[azbc]|xp[azbc])\b/.test(text))return body;
  text=text.replace(pattern,numeric).replace(/\b(\d+) (?:virgula|ponto) (\d+)\b/g,'$1,$2');
+ // A speech recognizer may spell a profile letter as its Portuguese name.
+ // Restrict this to an already identified belt request and a following size;
+ // do not rewrite prepositions ("de"), names or compact product codes.
+ text=text.replace(/\b(be|ce|aga|ze)(?=\s+\d)/g,word=>({be:'b',ce:'c',aga:'h',ze:'z'})[word]);
  return text.replace(/\bmilimetros?\b/g,'mm').replace(/\b([358])\s+vx\b/g,'$1vx').replace(/\bat (\d+)\b/g,'at$1');
 }

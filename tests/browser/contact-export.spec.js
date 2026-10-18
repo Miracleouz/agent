@@ -1,0 +1,13 @@
+import {test,expect} from '@playwright/test';
+import express from 'express';
+import {readFile} from 'node:fs/promises';
+import {resolve} from 'node:path';
+import ExcelJS from 'exceljs';
+import {Store} from '../../server/db.js';
+import {createApp,hashPassword} from '../../server/app.js';
+for(const role of ['admin','comercial'])test(`${role} downloads every contact from the export button while filtering a paginated agenda`,async({page})=>{
+ const store=new Store(':memory:'),app=createApp({store,whatsapp:{snapshot:()=>({status:'ready'}),send:async()=>{throw new Error('Export cannot send a message');}},production:true,appUrl:''});store.run('INSERT INTO users VALUES(?,?,?,?,?,1,?)','exporter','Equipe','export@example.test',hashPassword('export-browser-only-123'),role,1);if(role==='comercial')store.run('INSERT INTO users VALUES(?,?,?,?,?,1,?)','admin','Admin','admin@example.test',hashPassword('export-browser-only-123'),'admin',1);
+ for(let i=0;i<125;i++)store.run('INSERT INTO contacts VALUES(?,?,?,?,?,?,?)','c-'+i,'Contato '+String(i).padStart(3,'0'),String(5511980000000+i),'','exporter',1,1);
+ app.use(express.static(resolve('dist')));app.get('/{*splat}',(_req,res)=>res.sendFile(resolve('dist/index.html')));const server=await new Promise(r=>{const s=app.listen(0,'127.0.0.1',()=>r(s));});
+ try{if(role==='comercial')await page.setViewportSize({width:390,height:844});await page.goto(`http://127.0.0.1:${server.address().port}`);await page.getByLabel('E-mail',{exact:true}).fill('export@example.test');await page.getByLabel('Senha',{exact:true}).fill('export-browser-only-123');await page.getByRole('button',{name:'Entrar no painel',exact:true}).click();await page.getByRole('button',{name:'Contatos',exact:true}).click();await expect(page.locator('.contacts-table tbody tr')).toHaveCount(50);await page.getByLabel('Buscar contato',{exact:true}).fill('Contato 124');await expect(page.locator('.contacts-table tbody tr')).toHaveCount(1);const downloaded=page.waitForEvent('download');await page.getByRole('button',{name:'Exportar contatos',exact:true}).click();const file=await downloaded;expect(file.suggestedFilename()).toMatch(/^contatos-mp-correias-.*\.xlsx$/);const w=new ExcelJS.Workbook();await w.xlsx.load(await readFile(await file.path()));expect(w.worksheets[0].rowCount).toBe(126);expect(w.worksheets[0].getCell('B2').value).toBe('+5511980000000');expect(store.chats()).toHaveLength(0);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);}finally{await page.goto('about:blank');app.locals.close();server.closeAllConnections();await new Promise(r=>server.close(r));store.close();}
+});

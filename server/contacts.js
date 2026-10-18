@@ -1,6 +1,7 @@
 import {randomUUID} from 'node:crypto';
 import {z} from 'zod';
 import {sendAvatar} from './avatar-response.js';
+import ExcelJS from 'exceljs';
 const fail=(message,status=400)=>Object.assign(new Error(message),{status});
 export function normalizeContactPhone(value){
  if(typeof value!=='string'||value.length>40||!/^\+?[\d ().-]+$/.test(value.trim()))throw fail('Informe um telefone válido com DDD; para outros países, use + e o código do país.');
@@ -22,6 +23,16 @@ export function contactRoutes({app,store,accounts,agent,whatsapp}){
   const search=String(req.query.search||'').trim().slice(0,100),digits=search.replace(/\D/g,''),page=Math.max(0,Math.min(5000,Math.trunc(Number(req.query.page))||0)),limit=50,query=`%${search}%`,numeric=digits?`%${digits}%`:query;
   const where='WHERE name LIKE ? OR company LIKE ? OR phone LIKE ?',params=[query,query,numeric];
   res.json({items:store.all("SELECT id,name,phone,company,created,updated,(SELECT version FROM whatsapp_avatars WHERE remote_id=contacts.phone||'@c.us') avatar_version FROM contacts "+where+' ORDER BY name COLLATE NOCASE,id LIMIT ? OFFSET ?',...params,limit,page*limit),total:store.get('SELECT count(*) n FROM contacts '+where,...params).n,page,limit});
+ });
+ app.get('/api/contacts/export.xlsx',async(req,res)=>{
+  const workbook=new ExcelJS.Workbook();workbook.creator='COTA · MP Correias';
+  const sheet=workbook.addWorksheet('Contatos',{views:[{state:'frozen',ySplit:1}]});
+  sheet.columns=[{header:'Nome',key:'name',width:40},{header:'Celular',key:'phone',width:25,style:{numFmt:'@'}}];
+  for(const person of store.all('SELECT name,phone FROM contacts ORDER BY name COLLATE NOCASE,id'))sheet.addRow({name:person.name,phone:'+'+person.phone});
+  sheet.getRow(1).font={bold:true,color:{argb:'FFFFFFFF'}};sheet.getRow(1).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF183153'}};sheet.getRow(1).height=24;
+  sheet.autoFilter={from:'A1',to:`B${sheet.rowCount}`};
+  const data=await workbook.xlsx.writeBuffer();if(whatsapp.snapshot().status!=='ready')throw fail('O WhatsApp desconectou durante a exportação. Conecte e tente novamente.',409);
+  res.set({'Content-Type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','Content-Disposition':`attachment; filename="contatos-mp-correias-${new Date().toISOString().slice(0,10)}.xlsx"`}).send(Buffer.from(data));
  });
  app.get('/api/contacts/:id/avatar',(req,res)=>{const person=contact(req.params.id);sendAvatar(store,res,person.phone+'@c.us');});
  app.post('/api/contacts',(req,res)=>{
