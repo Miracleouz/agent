@@ -14,11 +14,8 @@ try{
  await f.add({id:'real-speech-auto',type:'ptt',body:'',format:'dollar1'});
  const row=f.store.get("SELECT * FROM messages WHERE provider_id='real-speech-auto'");
  assert.equal(row.transcription_state,'done',row.transcription_error);assert.match(row.transcript,/B\s*72/i);assert.equal(row.audio_agent_state,'interpreted');assert.deepEqual(Buffer.from(row.media_data),bytes);
- // This synthetic voice is imperfect: Whisper recognizes B72 but renders the
- // noun/question imprecisely. The safe response requests confirmation instead
- // of inventing a price for an uncertain catalog match.
- const sent=await f.sent();assert.equal(sent.length,1);assert.match(sent[0].body,/Pode confirmar os dados/);assert.doesNotMatch(sent[0].body,/R\$/);
+ const sent=await f.sent();assert.equal(sent.length,1);assert.match(sent[0].body,/B\s*72/i);assert.match(sent[0].body,/R\$/);
  const chat=f.store.chat(row.chat_id);f.store.run("UPDATE chats SET mode='manual',pause_until=NULL WHERE id=?",chat.id);
- await f.add({id:'real-speech-manual',type:'ptt',body:'',format:'dollar1'});const manual=f.store.get("SELECT * FROM messages WHERE provider_id='real-speech-manual'");await f.wa.transcription.request(manual.id);assert.equal(f.store.message(manual.id).transcription_state,'done');assert.equal((await f.sent()).length,1);
- console.log('PASS: actual Ogg/Opus → Whisper base → B72 recognized; uncertain wording requests confirmation; manual transcription adds no reply. Controlled browser only; no real WhatsApp account.');
+ await f.add({id:'real-speech-manual',type:'ptt',body:'',format:'dollar1'});const manual=f.store.get("SELECT * FROM messages WHERE provider_id='real-speech-manual'");await f.wa.transcription.request(manual.id);assert.equal(f.store.message(manual.id).transcription_state,'done',f.store.message(manual.id).transcription_error);assert.equal((await f.sent()).length,1);
+ console.log('PASS: actual Ogg/Opus → Whisper large-v3-turbo → B72 recognized and quoted; manual transcription adds no reply. Controlled browser only; no real WhatsApp account.');
 }finally{if(f)await f.close();await browser.close();}

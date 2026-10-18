@@ -1,4 +1,4 @@
-import {audioQuotationText} from './audio-quotation.js';
+import {audioQuotationAnalysis} from './audio-quotation.js';
 import {randomUUID} from 'node:crypto';
 import {normalize,demoProducts,mentionsBrand} from './catalog.js';
 import {parseBeltRequest,productBeltSpec,calculateBeltQuote,formatBeltCalculation,mergeBeltRequest} from './belts.js';
@@ -139,7 +139,7 @@ export class Agent {
   this.store.cancelFollowups(chat.id,{keepDelivery:true});
   if(unreadBatchIds)for(const id of unreadBatchIds)this.store.run("UPDATE messages SET inbound_verified=1 WHERE id=? AND chat_id=? AND direction='in' AND status='imported'",id,chat.id);
   if(alreadyRead){this.store.changed();return{chatId:chat.id,read:true};}
-  if(deferAudio){this.store.run('UPDATE messages SET audio_agent_state=?,audio_routing_version=? WHERE id=?',chat.mode==='auto'&&this.store.settings().agentEnabled?'pending':'skipped',chat.routing_version,inbound.id);this.store.changed();return{chatId:chat.id,deferred:true};}
+  if(deferAudio){this.store.run('UPDATE chats SET audio_pending_quote=NULL WHERE id=?',chat.id);this.store.run('UPDATE messages SET audio_agent_state=?,audio_routing_version=? WHERE id=?',chat.mode==='auto'&&this.store.settings().agentEnabled?'pending':'skipped',chat.routing_version,inbound.id);this.store.changed();return{chatId:chat.id,deferred:true};}
   return this.respondToMessage(chat,inbound,contextBody||body,forceHuman,channel,now);
  }
  finishAudio(id){
@@ -151,11 +151,23 @@ export class Agent {
    this.store.run('UPDATE messages SET audio_agent_state=? WHERE id=?',eligible?'interpreted':'skipped',id);this.store.changed();if(!eligible)return{ignored:true};
    if(!message.transcript?.trim()){this.store.run("UPDATE chats SET mode='manual',pause_until=NULL,needs_human=1,handoff_reason='human' WHERE id=?",chat.id);this.store.changed();return{chatId:chat.id,paused:true};}
    const original=message.transcript.trim(),kind=classifyMessage(original).type;
-   const body=kind==='quote'&&!live.pickup_pending_details&&!deliveryMethod(original)?audioQuotationText(original):original;
-   const result=await this.respondToMessage(live,message,body,!message.transcript,live.channel,this.now());if(!result.closed&&!result.paused&&result.intent!=='out_of_scope')this.followups.schedule(chat.id);return result;
+   const analysis=kind==='quote'&&!live.pickup_pending_details&&!deliveryMethod(original)?audioQuotationAnalysis(original,{uncertain:message.transcription_uncertain===1}):{body:original};
+   if(kind==='quote'&&message.transcription_uncertain===1&&!live.pickup_pending_details&&!deliveryMethod(original)&&!isBeltQuotation(analysis.body,live)){
+    this.store.run("UPDATE chats SET mode='manual',pause_until=NULL,needs_human=1,handoff_reason='audio_unclear' WHERE id=?",live.id);this.store.changed();return{chatId:live.id,paused:true};
+   }
+   const result=await this.respondToMessage(live,message,analysis.body,!message.transcript,live.channel,this.now(),{audioConfirmation:analysis.confirmation});if(!result.closed&&!result.paused&&result.intent!=='out_of_scope')this.followups.schedule(chat.id);return result;
   });
  }
- async respondToMessage(chat,inbound,body,forceHuman,channel,now){
+ async respondToMessage(chat,inbound,body,forceHuman,channel,now,{audioConfirmation=false}={}){
+  let rejectedAudio=false;
+  if(chat.audio_pending_quote){
+   const pending=JSON.parse(chat.audio_pending_quote),answer=conversationText(body).replace(/[.!?]+$/,'').trim();
+   this.store.run('UPDATE chats SET audio_pending_quote=NULL WHERE id=?',chat.id);
+   if(pending.version===chat.routing_version&&chat.mode==='auto'&&this.store.settings().agentEnabled){
+    if(/^(?:sim|isso|isso mesmo|correto|correta|exato|exatamente|confirmo|pode cotar)$/.test(answer))body=pending.query;
+    else if(/^(?:nao|nao e isso|errado|errada)$/.test(answer)){rejectedAudio=true;body='cotar correia';}
+   }
+  }
   const quotedOptions=JSON.parse(chat.quoted_options||'[]');
   const analysis=classifyMessage(body,{options:quotedOptions,pendingMeasure:chat.pending_measure,pendingSelection:chat.pending_selection});
   const type=forceHuman?'human':analysis.type;
@@ -173,6 +185,13 @@ export class Agent {
    }
    return this.reply(chat,text,actions,'bot',{allowClosed:type==='end_conversation'});
   };
+  if(audioConfirmation||rejectedAudio){
+   if(chat.mode!=='auto'||!this.store.settings().agentEnabled)return{chatId:chat.id,paused:true};
+   if(chat.closed_at)this.store.run('UPDATE chats SET closed_at=NULL,help_state=NULL WHERE id=?',chat.id);
+   if(audioConfirmation)this.store.run('UPDATE chats SET audio_pending_quote=? WHERE id=?',JSON.stringify({query:body,version:chat.routing_version}),chat.id);
+   await respond(rejectedAudio?'Qual é a referência correta da correia? Pode escrever ou enviar outro áudio.':`Entendi *${body}*. Está correto? Responda *SIM* para eu cotar ou informe a referência correta.`,[]);
+   return{chatId:chat.id,intent:'audio_confirmation'};
+  }
   if(help==='no'){
    this.store.closeChat(chat.id,now);return{chatId:chat.id,closed:true,intent:'end_conversation'};
   }

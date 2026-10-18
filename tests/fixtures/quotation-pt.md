@@ -4,10 +4,6 @@ Gerada com `espeak-ng -v pt-br -s 135` a partir de:
 “Olá, preciso de uma correia B setenta e dois. Qual o valor?”
 
 Convertida para Ogg/Opus com `ffmpeg -c:a libopus -b:a 24k`.
-O teste opcional `tests/real-audio.mjs` usa o motor Whisper real e verifica a
-referência B72, a solicitação de confirmação quando a fala é imprecisa e a
-ausência de resposta no modo manual. Nessa voz sintética o modelo reconhece
-B72, mas transcreve outras palavras incorretamente; o agente pede confirmação
-e não inventa um preço. As cotações com transcrição clara são verificadas nos
-testes controlados de conversas e áudio.
-Não mede precisão em áudios reais de clientes, ruído ou outros sotaques.
+O teste opcional `tests/real-audio.mjs` usa o motor Whisper large-v3-turbo real e verifica a referência B72, a cotação com valores e a ausência de resposta adicional em modo manual. O reconhecimento local é testado com Ogg/Opus e Chromium controlado, sem pareamento com uma conta real.
+
+O modelo base anterior reconhecia B72 mas errava outras palavras nessa voz sintética. Nos ensaios da versão 1.19.2, o modelo maior reconheceu a frase completa. Isso não mede precisão em todos os áudios reais de clientes, ruídos ou sotaques; outras amostras curtas sintetizadas ainda apresentaram erros e exigem confirmação/atendimento humano.

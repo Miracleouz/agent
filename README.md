@@ -22,6 +22,8 @@ Novidades da **1.19.0**: [áudio automático, encerramento com o agente pronto, 
 
 Correção da **1.19.1**: [reativação silenciosa, sem responder novamente às mensagens de um atendimento encerrado](docs/REATIVACAO_SILENCIOSA_1_19_1.md).
 
+Novidades da **1.19.2**: [Whisper large-v3-turbo local, confirmação de referências faladas, retranscrição e pedido de teste com diálogo salvo](docs/VOZ_LOCAL_E_PEDIDO_TESTE_1_19_2.md).
+
 ## O que está implementado
 
 - **Acompanhamento para Admin:** responsáveis atuais, fila livre, espera do cliente, digitação e média de resposta por usuário em 24 horas, 7 ou 30 dias. Atualização por eventos, com recuperação por consulta periódica. Não cria mensagens nem assume chats ocupados.

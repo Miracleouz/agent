@@ -6,10 +6,10 @@ import {randomUUID} from 'node:crypto';
 import assert from 'node:assert/strict';
 const image=process.argv[2];assert(image,'Usage: node tests/docker-realtime.mjs IMAGE');
 const exec=promisify(execFile),name='cota-live-test-'+randomUUID().slice(0,8);
-const docker=async(...args)=>(await exec('docker',args,{maxBuffer:4*1024*1024,timeout:180000})).stdout;
+const docker=async(...args)=>{try{return(await exec('docker',args,{maxBuffer:4*1024*1024,timeout:180000})).stdout;}catch(error){if(args[0]==='start'&&typeof error.code==='number'&&error.stdout)return error.stdout+'\n'+(error.stderr||'');throw error;}};
 let created=false;
 try{
- await docker('create','--init','--network','none','--name',name,'--label','cota.disposable-live-test=true','--shm-size=512m','--entrypoint','node',image,'--test','tests/realtime.test.js','tests/whatsapp-conversation-media.test.js','tests/review-1-18-1.test.js','tests/whatsapp-native-media.test.js','tests/production-features.mjs','tests/production-monitoring.mjs','tests/automatic-audio.test.js','tests/quiet-reactivation.test.js','tests/production-1-19-0.mjs');created=true;
+ await docker('create','--init','--network','none','--name',name,'--label','cota.disposable-live-test=true','--shm-size=512m','--entrypoint','node',image,'--test','tests/realtime.test.js','tests/whatsapp-conversation-media.test.js','tests/review-1-18-1.test.js','tests/whatsapp-native-media.test.js','tests/production-features.mjs','tests/production-monitoring.mjs','tests/automatic-audio.test.js','tests/speech-precision.test.js','tests/quiet-reactivation.test.js','tests/production-1-19-0.mjs');created=true;
  // The server code and production dependencies remain those of the image.
  await docker('cp','tests',name+':/app/tests');await docker('cp','src',name+':/app/src');
  const output=await docker('start','--attach',name),code=Number((await docker('inspect','--format','{{.State.ExitCode}}',name)).trim());

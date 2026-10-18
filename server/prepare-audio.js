@@ -1,11 +1,13 @@
 import {spawn} from 'node:child_process';
 import {resolve,join} from 'node:path';
 import {transcriptionError} from './transcription-errors.js';
+import {speechConfig} from './speech-config.js';
+const speech=speechConfig();
 const mode=process.argv.includes('--prepare')?'--prepare':'--check';
 const cache=join(resolve(process.env.DATA_DIR||'data'),'models');
-console.log(mode==='--prepare'?'Preparando modelo local de voz (base). O primeiro download requer Internet.':'Verificando o motor e o modelo local de voz, sem download ou acesso ao WhatsApp.');
+console.log(mode==='--prepare'?`Preparando modelo local de voz (${speech.model}). O primeiro download requer Internet.`:'Verificando o motor e o modelo local de voz, sem download ou acesso ao WhatsApp.');
 const child=spawn(process.env.TRANSCRIPTION_PYTHON||'/opt/cota-transcribe/bin/python',['-u',new URL('../scripts/transcribe.py',import.meta.url).pathname,mode,cache],{stdio:['ignore','pipe','pipe'],env:{...process.env,HF_HUB_DISABLE_XET:'1'}});
-let errors='',output='';const timer=setTimeout(()=>{child.kill('SIGKILL');console.error('O diagnóstico/preparo excedeu o prazo. Confira a rede e tente novamente.');process.exitCode=1;},mode==='--prepare'?600000:30000);
+let errors='',output='';const timer=setTimeout(()=>{child.kill('SIGKILL');console.error('O diagnóstico/preparo excedeu o prazo. Confira a rede e tente novamente.');process.exitCode=1;},mode==='--prepare'?1200000:90000);
 child.stdout.on('data',v=>{output=(output+v).slice(-4000);});child.stderr.on('data',v=>{errors=(errors+v).slice(-4000);});
 child.once('error',()=>{clearTimeout(timer);console.error('Motor de voz indisponível. Atualize a imagem Docker ou configure TRANSCRIPTION_PYTHON.');process.exitCode=1;});
-child.once('close',code=>{clearTimeout(timer);if(process.exitCode)return;if(code!==0){console.error(transcriptionError(errors));process.exitCode=1;return;}try{if(!JSON.parse(output).ready)throw new Error();console.log('OK: motor local e modelo base disponíveis. Nenhum áudio ou mensagem foi enviado.');}catch{console.error('O motor de voz retornou um resultado inválido.');process.exitCode=1;}});
+child.once('close',code=>{clearTimeout(timer);if(process.exitCode)return;if(code!==0){console.error(transcriptionError(errors));process.exitCode=1;return;}try{if(!JSON.parse(output).ready)throw new Error();console.log(`OK: motor local e modelo ${speech.model} disponíveis. Nenhum áudio ou mensagem foi enviado.`);}catch{console.error('O motor de voz retornou um resultado inválido.');process.exitCode=1;}});

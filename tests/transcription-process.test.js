@@ -13,12 +13,16 @@ async function model(t,body){const dir=await mkdtemp(join(tmpdir(),'cota-model-t
 test('actual Python protocol returns a transcript to Node from audio bytes',async t=>{const dir=await model(t,`from types import SimpleNamespace
 class WhisperModel:
  def __init__(self,*args,**kwargs):
+  assert args[0]=='large-v3-turbo'
   assert kwargs['device']=='cpu' and kwargs['compute_type']=='int8'
+  assert kwargs['local_files_only'] is True
  def transcribe(self,path,**kwargs):
   assert open(path,'rb').read()==b'fixture-audio'
   assert kwargs['language']=='pt' and kwargs['vad_filter'] is True
+  assert kwargs['beam_size']==5 and kwargs['condition_on_previous_text'] is False
+  assert kwargs['word_timestamps'] is True and kwargs['max_new_tokens']==256
   return iter([SimpleNamespace(text=' Cotar correia B72 ')]),SimpleNamespace(duration=12)
-`);assert.equal(await transcribeAudio(Buffer.from('fixture-audio'),{dataDir:dir}),'Cotar correia B72');});
+`);assert.deepEqual(await transcribeAudio(Buffer.from('fixture-audio'),{dataDir:dir}),{text:'Cotar correia B72',uncertain:false});});
 test('model download errors are actionable and never expose signed URLs or paths',async t=>{const dir=await model(t,`class ProxyError(Exception): pass
 class WhisperModel:
  def __init__(self,*args,**kwargs): raise ProxyError('https://private.test/?token=secret')
