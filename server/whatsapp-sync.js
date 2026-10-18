@@ -105,7 +105,7 @@ export class WhatsAppSync{
   try{
    const read=()=>bounded(()=>readCachedHistory(client,chat.phone,2000,this.cutoff,{loadEarlier:false}),signal,this.timeout);
    const snapshot=await read();if(!this.active(client,generation)||signal.aborted)return;
-   const ids=new Set(snapshot.unreadIds||[]),candidates=snapshot.messages.filter(m=>ids.has(idOf(m))).map(m=>({remote:m,local:this.store.get("SELECT * FROM messages WHERE provider_id=? AND chat_id=? AND direction='in' AND status='imported' AND inbound_verified=0 AND deleted_at IS NULL",idOf(m),chat.id)})).filter(m=>m.local);
+   const ids=new Set(snapshot.unreadIds||[]),candidates=snapshot.messages.filter(m=>ids.has(idOf(m))).map(m=>({remote:m,local:this.store.get("SELECT * FROM messages WHERE provider_id=? AND chat_id=? AND direction='in' AND status='imported' AND inbound_verified=0 AND deleted_at IS NULL",idOf(m),chat.id)})).filter(m=>m.local&&m.local.created>live.auto_reply_after);
    if(!candidates.length)return;
    const newest=snapshot.messages.filter(m=>ids.has(idOf(m))).at(-1);
    const last=candidates.at(-1),version=live.routing_version;if(idOf(last.remote)!==idOf(newest))return;

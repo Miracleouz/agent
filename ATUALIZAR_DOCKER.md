@@ -1,4 +1,6 @@
-# Atualizar para a versão 1.19.0 no Docker
+# Atualizar para a versão 1.19.1 no Docker
+
+A versão 1.19.1 corrige o envio de uma resposta a cotações antigas após reativar/liberar um atendimento. Essas ações passam a aguardar somente uma nova mensagem do cliente, sem aviso de retorno. O histórico é preservado. Veja [reativação silenciosa e validação](docs/REATIVACAO_SILENCIOSA_1_19_1.md).
 
 A versão 1.19.0 mantém sua posição ao ler mensagens antigas, incluindo atualizações em tempo real e grupos. Também reconhece o perfil falado “bê trinta” como B30 no atendimento automático por áudio, deixa o agente pronto ao encerrar, exporta a agenda completa para Excel e adiciona a aba [Pedidos](docs/PEDIDOS_1_19_0.md), com períodos e cancelamento que devolve os itens ao estoque. Veja [áudio automático e rolagem](docs/AUDIO_E_ROLAGEM_1_19_0.md).
 
@@ -20,7 +22,7 @@ Use a instalação que já está funcionando. O ZIP contém o código; estoque, 
 docker compose stop -t 30 cota
 ```
 
-4. Copie o conteúdo da pasta extraída (`agent-<código>` no download do GitHub ou `cota-whatsapp-1.19.0` no pacote local) para a pasta da instalação atual, substituindo os arquivos do código. O `compose.yaml`, o `Dockerfile`, `server` e `src` devem ficar diretamente na pasta atual, sem criar outra pasta dentro dela. Preserve seu `.env`, dados locais e eventuais ajustes próprios de porta, domínio ou volumes no `compose.yaml`.
+4. Copie o conteúdo da pasta extraída (`agent-<código>` no download do GitHub ou `cota-whatsapp-1.19.1` no pacote local) para a pasta da instalação atual, substituindo os arquivos do código. O `compose.yaml`, o `Dockerfile`, `server` e `src` devem ficar diretamente na pasta atual, sem criar outra pasta dentro dela. Preserve seu `.env`, dados locais e eventuais ajustes próprios de porta, domínio ou volumes no `compose.yaml`.
 5. Na mesma pasta e usando o mesmo projeto Compose da instalação anterior, execute:
 
 ```powershell
@@ -42,7 +44,7 @@ docker compose logs --tail=100 cota
 docker compose exec cota node -p "require('./package.json').version"
 ```
 
-Deve mostrar `1.19.0`.
+Deve mostrar `1.19.1`.
 
 Para preparar e conferir a transcrição local, execute cada comando separadamente:
 
@@ -81,7 +83,7 @@ Nesta versão, o atendimento automático envia um único aviso e encerra após c
 
 Não execute `docker compose down -v` nem exclua o volume `cota-data`. O nome real do volume costuma incluir o nome do projeto Compose. Mantenha a mesma instalação/projeto para preservar estoque, acessos, histórico e sessão. Caso a sessão de WhatsApp tenha expirado, gere um novo QR no painel.
 
-Os resultados e limites dos testes desta versão estão em [TESTES_1_19_0.md](docs/TESTES_1_19_0.md). Construa a imagem na sua instalação pelo comando acima.
+Os resultados e limites dos testes desta versão estão em [REATIVACAO_SILENCIOSA_1_19_1.md](docs/REATIVACAO_SILENCIOSA_1_19_1.md). Os testes da entrega anterior estão em [TESTES_1_19_0.md](docs/TESTES_1_19_0.md). Construa a imagem na sua instalação pelo comando acima.
 
 Se a recuperação pelo painel não concluir, há um [procedimento de recuperação offline pelo Docker](docs/RECUPERACAO_FORA_DO_PAINEL.md) para a instalação padrão. Ele usa a imagem e o volume exatos do contêiner existente e verifica se outros contêineres ainda usam esse volume, sem exigir outra atualização do aplicativo.
 

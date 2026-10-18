@@ -20,6 +20,8 @@ Novidades da **1.18.2**: [correção do envio de fotos, download de áudio e dia
 
 Novidades da **1.19.0**: [áudio automático, encerramento com o agente pronto, rolagem estável, exportação de contatos e pedidos com devolução de estoque no cancelamento](docs/AUDIO_E_ROLAGEM_1_19_0.md).
 
+Correção da **1.19.1**: [reativação silenciosa, sem responder novamente às mensagens de um atendimento encerrado](docs/REATIVACAO_SILENCIOSA_1_19_1.md).
+
 ## O que está implementado
 
 - **Acompanhamento para Admin:** responsáveis atuais, fila livre, espera do cliente, digitação e média de resposta por usuário em 24 horas, 7 ou 30 dias. Atualização por eventos, com recuperação por consulta periódica. Não cria mensagens nem assume chats ocupados.

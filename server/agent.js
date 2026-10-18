@@ -120,10 +120,19 @@ export class Agent {
   }
   return this.enqueue(`${input.provider||'qr'}:${input.channel}:${input.phone}`,async()=>{const result=await this.process(input);if(result.chatId&&!result.closed&&!result.duplicate&&!result.ignored&&!result.deferred&&!result.read&&result.intent!=='out_of_scope')this.followups.schedule(result.chatId);return result;});
  }
- async process({phone,name,body,providerId,channel='whatsapp',provider='qr',isGroup=false,fromMe=false,isStatus=false,forceHuman=false,liveVerified=false,deferAudio=false,alreadyRead=false,canRespond=null,contextBody=null,unreadBatchIds=null}){
-  if(isGroup||fromMe||isStatus||/@g\.us$|@broadcast$|@newsletter$/.test(phone))return{ignored:true};if(!body?.trim())return{ignored:true};if(canRespond&&await canRespond()!==true)return{ignored:true};const imported=providerId&&this.store.get('SELECT * FROM messages WHERE provider_id=?',providerId);
+ async process({phone,name,body,providerId,channel='whatsapp',provider='qr',isGroup=false,fromMe=false,isStatus=false,forceHuman=false,liveVerified=false,deferAudio=false,alreadyRead=false,canRespond=null,contextBody=null,unreadBatchIds=null,receivedTimestamp=null}){
+  if(isGroup||fromMe||isStatus||/@g\.us$|@broadcast$|@newsletter$/.test(phone))return{ignored:true};if(!body?.trim())return{ignored:true};if(canRespond&&await canRespond()!==true)return{ignored:true};const imported=providerId&&this.store.get('SELECT *,rowid sequence FROM messages WHERE provider_id=?',providerId);
   if(imported&&!(liveVerified===true&&channel==='whatsapp'&&provider==='qr'&&imported.status==='imported'&&imported.direction==='in'&&imported.inbound_verified===0&&this.store.get('SELECT id FROM chats WHERE id=? AND phone=? AND channel=? AND provider=?',imported.chat_id,phone,channel,provider)))return{duplicate:true};this.store.resumeExpired();
   let chat=this.store.get('SELECT * FROM chats WHERE phone=? AND channel=? AND provider=?',phone,channel,provider);const now=this.now();if(!chat){const id=randomUUID();this.store.run('INSERT INTO chats(id,phone,name,channel,provider,updated,last_inbound) VALUES(?,?,?,?,?,?,?)',id,phone,name||phone.replace(/@.*$/,''),channel,provider,now,now);chat=this.store.chat(id);}
+  // A resume/release is permission for the NEXT request, never for an old row
+  // promoted by synchronization. Keep suppressed events visible as history.
+  // Same-second timestamps alone cannot distinguish new traffic. A new row
+  // PLUS the verified live event can; rows already known at resume stay blocked.
+  const newLiveSnapshot=imported&&!canRespond&&liveVerified&&Number.isFinite(receivedTimestamp)&&receivedTimestamp>=Math.floor(chat.auto_reply_after/1000)&&imported.sequence>chat.auto_reply_sequence;
+  if(chat.auto_reply_after>0&&(imported&&imported.created<=chat.auto_reply_after&&!newLiveSnapshot||Number.isFinite(receivedTimestamp)&&receivedTimestamp<Math.floor(chat.auto_reply_after/1000))){
+   if(!imported){const row=this.store.addMessage({chatId:chat.id,providerId,direction:'in',body:body.trim(),status:'imported'});this.store.run('UPDATE messages SET created=? WHERE id=?',receivedTimestamp*1000,row.id);}
+   return{chatId:chat.id,ignored:true};
+  }
   this.store.run('UPDATE chats SET unread=unread+?,last_inbound=? WHERE id=?',alreadyRead?0:1,now,chat.id);const inbound=imported||this.store.addMessage({chatId:chat.id,providerId,direction:'in',body:body.trim()});
   if(imported){this.store.run("UPDATE messages SET body=?,status='received',created=? WHERE id=?",body.trim(),canRespond?imported.created:now,inbound.id);this.store.run('UPDATE chats SET updated=? WHERE id=?',now,chat.id);}
   this.store.run('UPDATE messages SET inbound_verified=1 WHERE id=?',inbound.id);if(imported)this.store.changed();
